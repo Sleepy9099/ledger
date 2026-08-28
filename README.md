@@ -61,6 +61,10 @@ refuses shallow clones rather than passing vacuously.
   `--no-code "reason"`. Unanswered `HUMAN:` questions block closing.
 - **IDs are random** (`T-` + 6 of `[a-z0-9]`), so parallel branches never
   fight over a counter; new tasks are new files and merge trivially.
+- **Parallel agents on one checkout are safe**: every mutating command
+  serializes behind a cross-process lock (`.ledger/.lock`), so concurrent
+  `next --claim` calls produce exactly one winner. Cross-branch coordination
+  stays advisory — branches are the isolation model.
 
 ## Daily commands
 

@@ -12,6 +12,7 @@ Protocol: .ledger/PROTOCOL.md
 from __future__ import annotations
 
 import argparse
+import atexit
 import dataclasses
 import json
 import os
@@ -20,8 +21,18 @@ import secrets
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+try:
+    import msvcrt  # Windows
+except ImportError:
+    msvcrt = None
+try:
+    import fcntl  # POSIX
+except ImportError:
+    fcntl = None
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -57,6 +68,7 @@ CONFLICT_RE = re.compile(r"^(<{7}|={7}|>{7}|\|{7})( |$)")
 ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 GITATTRIBUTES_LINE = ".ledger/** text eol=lf"
+GITIGNORE_LINE = ".ledger/.lock"
 CLAUDE_BEGIN = "<!-- LEDGER:BEGIN -->"
 CLAUDE_END = "<!-- LEDGER:END -->"
 
@@ -696,6 +708,69 @@ class Ctx:
         return re.compile(rf"^{re.escape(self.prefix)}-[a-z0-9]{{6}}$")
 
 
+# ---------------------------------------------------------------------------
+# Cross-process mutation lock
+#
+# os.replace makes individual file writes atomic, but a mutating command is a
+# read -> decide -> write sequence over shared task state: without
+# serialization, two agent processes on the SAME checkout can both read a task
+# as todo and both "successfully" claim it. Every mutating command therefore
+# takes one ledger-wide lock BEFORE loading task state and holds it until the
+# process exits (the OS releases it even on crash). Cross-BRANCH concurrency
+# stays advisory by design — separate checkouts are the isolation model.
+# ---------------------------------------------------------------------------
+
+LOCK_FILENAME = ".lock"
+_LOCK_HANDLE: int | None = None  # keeps the locked fd alive for process life
+
+
+def _remove_quietly(path: str) -> None:
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def _acquire_mutation_lock(ledger_dir: Path) -> None:
+    global _LOCK_HANDLE
+    if _LOCK_HANDLE is not None:
+        return
+    try:
+        timeout = float(os.environ.get("LEDGER_LOCK_TIMEOUT", "") or 10.0)
+    except ValueError:
+        timeout = 10.0
+    lock_path = ledger_dir / LOCK_FILENAME
+    deadline = time.monotonic() + timeout
+    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o644)
+    while True:
+        try:
+            if msvcrt is not None:
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            elif fcntl is not None:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            else:
+                # exotic platform without either: O_EXCL sidecar lockfile
+                sidecar = str(lock_path) + ".pid"
+                side_fd = os.open(sidecar,
+                                  os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+                os.write(side_fd, str(os.getpid()).encode("ascii"))
+                os.close(side_fd)
+                atexit.register(_remove_quietly, sidecar)
+            _LOCK_HANDLE = fd  # held until process exit; OS releases it
+            return
+        except OSError:
+            if time.monotonic() >= deadline:
+                os.close(fd)
+                raise LedgerError(
+                    "lock-timeout",
+                    f"could not acquire the ledger lock ({lock_path}) within "
+                    f"{timeout:.1f}s — another ledger process holds it",
+                    fix_hint="retry; raise LEDGER_LOCK_TIMEOUT (seconds) if "
+                             "long-running ledger operations are expected")
+            time.sleep(0.05)
+
+
 def find_ledger_dir(start: Path | None = None) -> Path | None:
     p = (start or Path.cwd()).resolve()
     for candidate in (p, *p.parents):
@@ -717,13 +792,16 @@ def resolve_actor(args) -> str:
     return "unknown"
 
 
-def make_ctx(args) -> Ctx:
+def make_ctx(args, mutating: bool = False) -> Ctx:
     ledger_dir = find_ledger_dir()
     if ledger_dir is None:
         raise LedgerError(
             "not-initialized",
             "no .ledger/ directory found here or in any parent directory",
             fix_hint="run: python ledger.py init  (from the repo root)")
+    if mutating:
+        # serialize BEFORE any task state is read (see lock rationale above)
+        _acquire_mutation_lock(ledger_dir)
     config = dict(DEFAULT_CONFIG)
     cfg_path = ledger_dir / "config.json"
     if cfg_path.exists():
@@ -1005,6 +1083,7 @@ def cmd_init(args) -> int:
     ledger_dir = (root / ".ledger").resolve()
     created = not (ledger_dir / "config.json").exists()
     ledger_dir.mkdir(parents=True, exist_ok=True)
+    _acquire_mutation_lock(ledger_dir)
     (ledger_dir / "tasks").mkdir(exist_ok=True)
 
     dest_script = ledger_dir / "ledger.py"
@@ -1033,6 +1112,12 @@ def cmd_init(args) -> int:
     if GITATTRIBUTES_LINE not in ga_text:
         sep = "" if (not ga_text or ga_text.endswith("\n")) else "\n"
         atomic_write(ga_path, ga_text + sep + GITATTRIBUTES_LINE + "\n")
+
+    gi_path = root / ".gitignore"
+    gi_text = gi_path.read_text(encoding="utf-8") if gi_path.exists() else ""
+    if GITIGNORE_LINE not in gi_text:
+        sep = "" if (not gi_text or gi_text.endswith("\n")) else "\n"
+        atomic_write(gi_path, gi_text + sep + GITIGNORE_LINE + "\n")
 
     claude_path = root / "CLAUDE.md"
     block = f"{CLAUDE_BEGIN}\n\n{PROTOCOL_TEXT}\n{CLAUDE_END}\n"
@@ -1113,7 +1198,7 @@ def _check_section_body(text: str, what: str) -> str:
 
 
 def cmd_add(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     tasks, _ = load_all_tasks(ctx)
     existing = {t.id for t in tasks}
     title = _require_title(args.title)
@@ -1188,7 +1273,7 @@ def cmd_show(args) -> int:
 
 
 def cmd_next(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=args.claim)
     tasks, problems = load_all_tasks(ctx)
     bad = structural_problem_stems(problems)
     pool = [t for t in tasks
@@ -1234,7 +1319,7 @@ def cmd_next(args) -> int:
 
 
 def cmd_claim(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     stale_days = int(ctx.config.get("stale_claim_days", 7))
     if task.status in ("done", "dropped"):
@@ -1284,7 +1369,7 @@ def _guard_foreign_claim(ctx: Ctx, task: Task, force: bool, verb: str) -> None:
 
 
 def cmd_release(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     if task.status in ("done", "dropped"):
         raise LedgerError("bad-state", f"{task.id} is {task.status}",
@@ -1338,7 +1423,7 @@ def _would_cycle(ctx: Ctx, task_id: str, new_deps: list[str]) -> bool:
 
 
 def cmd_set(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     changes = []
     if args.title is not None:
@@ -1406,7 +1491,7 @@ def cmd_set(args) -> int:
 
 
 def cmd_note(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     task.append_log(ctx.actor, "note", args.text)
     save_task(task)
@@ -1446,7 +1531,7 @@ def _resolve_checkbox_line(content: str, selector: str,
 
 
 def cmd_step(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     content = task.get_section("Next Steps")
     if args.action == "add":
@@ -1475,7 +1560,7 @@ def cmd_step(args) -> int:
 
 
 def cmd_question(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     content = task.get_section("Open Questions")
     if args.action == "add":
@@ -1535,7 +1620,7 @@ def cmd_questions(args) -> int:
 
 
 def cmd_block(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     if task.status in ("done", "dropped"):
         raise LedgerError("bad-state", f"{task.id} is {task.status}",
@@ -1552,7 +1637,7 @@ def cmd_block(args) -> int:
 
 
 def cmd_unblock(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     if task.status != "blocked":
         raise LedgerError("bad-state", f"{task.id} is not blocked",
@@ -1589,7 +1674,7 @@ def _link_commits(ctx: Ctx, task: Task, refs: list[str]) -> list[dict]:
 
 
 def cmd_link(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     linked = _link_commits(ctx, task, args.sha)
     save_task(task)
@@ -1626,7 +1711,7 @@ def _backfill_from_trailers(ctx: Ctx, tasks: list[Task],
 
 
 def cmd_scan(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=args.write)
     repo = ctx.repo
     if repo is None:
         raise LedgerError("no-git", "not inside a git repository")
@@ -1670,7 +1755,7 @@ def cmd_scan(args) -> int:
 
 
 def cmd_done(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     if task.status in ("done", "dropped"):
         raise LedgerError("bad-state", f"{task.id} is already {task.status}",
@@ -1744,7 +1829,7 @@ def cmd_done(args) -> int:
 
 
 def cmd_drop(args) -> int:
-    ctx = make_ctx(args)
+    ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     if task.status in ("done", "dropped"):
         raise LedgerError("bad-state", f"{task.id} is already {task.status}",

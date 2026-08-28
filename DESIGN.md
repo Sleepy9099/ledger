@@ -257,6 +257,15 @@ reduces to git's per-line merge on one small Markdown file.
 - **(f) Cross-branch double-claims** reconcile at merge as a 1-line conflict;
   duplicated effort is detected, not prevented (a true lock needs a server —
   out of scope).
+- **(g) Same-checkout concurrency is serialized:** every mutating command
+  (including `next --claim` and `scan --write`) takes a ledger-wide
+  cross-process lock (`.ledger/.lock`, `msvcrt.locking`/`fcntl.flock`)
+  BEFORE reading task state and holds it for the process lifetime, so two
+  parallel agent processes in one working tree cannot both read a task as
+  todo and both "win" the claim. Bounded wait (10s, `LEDGER_LOCK_TIMEOUT`
+  overrides) with a `lock-timeout` refusal, exit 2. Read-only commands stay
+  lock-free. The lock file is gitignored by `init` and the OS releases the
+  lock even on a crash.
 - **Post-merge ritual:** `ledger validate --coverage` + `ledger scan --write`
   (`--coverage` is what runs the Log tamper checks).
 

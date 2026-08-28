@@ -55,7 +55,8 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 
 ## After any merge or rebase
 
-- Run `ledger validate` and `ledger scan --write`, then fix what they report.
+- Run `ledger validate --coverage` and `ledger scan --write`, then fix what
+  they report (--coverage also runs the Log tamper checks).
 - Log-section conflict: keep BOTH sides' lines, delete the markers
   (lines are timestamped; order does not matter).
 - Header-field conflict: pick the value matching the latest real event
