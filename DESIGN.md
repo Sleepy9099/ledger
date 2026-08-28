@@ -225,12 +225,16 @@ repairs), `linked-never-claimed` (a trailer against a still-OPEN task with no cl
 Log evidence at all — a released task is NOT flagged because its claim line
 survives, and a closed task is NOT flagged because it cannot be claimed
 retroactively and its closing Log line records engagement); with
-`--coverage` additionally `log-tamper` (Log lines present at
-baseline deleted from the working tree, and task files present at baseline
-deleted outright — a config-immune diff/ls-tree scan that also catches
-uncommitted vandalism before the session's final commit). Info (never
-promoted, `--coverage` only): `exempt-ratio` — escape-hatch abuse stays
-visible.
+`--coverage` additionally `log-tamper` — the append-only Log verified
+**historically**: every commit in scope is checked parent→commit (merge
+commits against each parent), so once a Log event enters repository history
+no later state may remove or alter it, task-file deletions included, and a
+HEAD→working-tree pass catches uncommitted tampering before the session's
+final commit. A net baseline→now diff could not see add-then-delete
+sequences; the per-commit walk can. All scans pin git config
+(`diff.noprefix`/`mnemonicPrefix`/`external`, `core.quotePath`) so user
+settings cannot silently blind them. Info (never promoted, `--coverage`
+only): `exempt-ratio` — escape-hatch abuse stays visible.
 
 All offline checks also run with `--no-git` for exported trees.
 

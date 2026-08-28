@@ -1,12 +1,11 @@
 ---
 id: T-q59p4n
 title: Cross-process mutation lock
-status: in_progress
+status: done
 priority: p1
 size: m
 created: 2026-08-28T11:54:59Z
-claimed_by: claude-2026-08-28-a
-claimed_at: 2026-08-28T12:04:31Z
+closed: 2026-08-28T12:07:17Z
 tags: concurrency
 ---
 
@@ -29,7 +28,11 @@ Design constraints:
 
 ## Commits
 
+- 3cd3a4c 2026-08-28 Add cross-process mutation lock
+
 ## Log
 
 - 2026-08-28T11:54:59Z [claude-2026-08-28-a] add: created: Cross-process mutation lock
 - 2026-08-28T12:04:31Z [claude-2026-08-28-a] claim: claimed
+- 2026-08-28T12:07:17Z [claude-2026-08-28-a] link: 3cd3a4c (backfilled from trailer)
+- 2026-08-28T12:07:17Z [claude-2026-08-28-a] done: evidence: 3cd3a4c

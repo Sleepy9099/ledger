@@ -361,6 +361,91 @@ def test_closed_unclaimed_task_does_not_fail_strict_forever(repo):
     assert rc == 0, payload["errors"]  # closed: engagement recorded, repairable state
 
 
+def test_add_then_delete_after_baseline_detected(repo):
+    """The exact hole in net-diff detection: a Log line born after baseline
+    and deleted in a later commit nets out of a baseline->now comparison.
+    Commit-by-commit history verification must catch it."""
+    tid = repo.add_task("Born after baseline")
+    repo.j("note", tid, "ephemeral truth")
+    repo.commit_all("Track task with note")
+    text = "\n".join(line for line in repo.read(tid).split("\n")
+                     if "ephemeral truth" not in line)
+    repo.write(tid, text)
+    repo.commit_all("Quietly drop the note", ("Ledger-Exempt: cover-up",))
+    rc, payload = validate(repo, "--coverage")
+    tamper = [e for e in payload["errors"] if e["code"] == "log-tamper"]
+    assert any(e["task"] == tid and "in commit" in e["message"]
+               for e in tamper), payload["errors"]
+
+
+def test_committed_file_deletion_detected(repo):
+    tid = repo.add_task("Doomed")
+    repo.commit_all("Track doomed task")
+    repo.git("rm", "-q", f".ledger/tasks/{tid}.md")
+    repo.commit_all("Erase the task", ("Ledger-Exempt: cover-up",))
+    rc, payload = validate(repo, "--coverage")
+    tamper = [e for e in payload["errors"] if e["code"] == "log-tamper"]
+    assert any(e["task"] == tid and "deleted in commit" in e["message"]
+               for e in tamper), payload["errors"]
+
+
+def test_merge_dropping_one_sides_log_detected(repo):
+    tid = repo.add_task("Contested history")
+    repo.commit_all("Track contested task")
+    repo.git("checkout", "-q", "-b", "ours")
+    repo.j("note", tid, "ours breadcrumb")
+    repo.commit_all("Ours note")
+    repo.git("checkout", "-q", "main")
+    repo.git("checkout", "-q", "-b", "theirs")
+    repo.j("note", tid, "theirs breadcrumb")
+    repo.commit_all("Theirs note")
+    repo.git("checkout", "-q", "main")
+    repo.git("merge", "-q", "ours")
+    r = repo.git("merge", "theirs", check=False)
+    # BAD resolution: keep only our side's Log line, drop theirs
+    text = repo.read(tid)
+    lines = [line for line in text.split("\n")
+             if not line.startswith(("<<<<<<<", "=======", ">>>>>>>"))
+             and "theirs breadcrumb" not in line]
+    repo.write(tid, "\n".join(lines))
+    repo.git("add", "-A")
+    if r.returncode != 0:
+        repo.git("commit", "-q", "--no-edit")
+    else:
+        repo.git("commit", "-q", "-m", "Merge cleanup",
+                 "-m", "Ledger-Exempt: fixture")
+    rc, payload = validate(repo, "--coverage")
+    tamper = [e for e in payload["errors"] if e["code"] == "log-tamper"]
+    assert any(e["task"] == tid and
+               ("in merge" in e["message"] or "in commit" in e["message"])
+               for e in tamper), payload["errors"]
+
+
+def test_keep_both_merge_resolution_stays_clean(repo):
+    tid = repo.add_task("Peaceful history")
+    repo.commit_all("Track peaceful task")
+    repo.git("checkout", "-q", "-b", "left2")
+    repo.j("note", tid, "left line")
+    repo.commit_all("Left note")
+    repo.git("checkout", "-q", "main")
+    repo.git("checkout", "-q", "-b", "right2")
+    repo.j("note", tid, "right line")
+    repo.commit_all("Right note")
+    repo.git("checkout", "-q", "main")
+    repo.git("merge", "-q", "left2")
+    r = repo.git("merge", "right2", check=False)
+    if r.returncode != 0:
+        text = "\n".join(
+            line for line in repo.read(tid).split("\n")
+            if not line.startswith(("<<<<<<<", "=======", ">>>>>>>")))
+        repo.write(tid, text)
+        repo.git("add", "-A")
+        repo.git("commit", "-q", "--no-edit")
+    rc, payload = validate(repo, "--coverage")
+    assert rc == 0, payload["errors"]
+    assert not [e for e in payload["errors"] if e["code"] == "log-tamper"]
+
+
 def test_unicode_prefix_tamper_detection(tmp_path, base_env):
     """core.quotePath octal-escaping must not blind the tamper checks."""
     from conftest import LedgerRepo, _isolated_env

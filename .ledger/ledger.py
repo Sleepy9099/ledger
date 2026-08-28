@@ -2114,6 +2114,54 @@ def validate_offline(ctx: Ctx) -> list[dict]:
     return violations
 
 
+def _tamper_violations(patch: str, where: str, violations: list[dict]) -> None:
+    """Collect log-tamper violations from one unified diff."""
+    removed: dict[str, list[str]] = {}
+    added: dict[str, set[str]] = {}
+    deleted_files: list[str] = []
+    current_new: str | None = None
+    current_old: str | None = None
+    for line in patch.split("\n"):
+        if line.startswith("diff --git"):
+            current_new = current_old = None
+        elif line.startswith("--- a/"):
+            current_old = line[6:]
+        elif line.startswith("--- "):
+            current_old = None  # /dev/null: file created in this diff
+        elif line.startswith("+++ b/"):
+            current_new = line[6:]
+        elif line.startswith("+++ "):
+            current_new = None  # /dev/null: file deleted in this diff
+            if current_old and current_old.endswith(".md"):
+                deleted_files.append(current_old)
+        elif line.startswith("-") and not line.startswith("---"):
+            content = line[1:]
+            if LOG_LINE_RE.match(content):
+                target = current_new or current_old
+                if target:
+                    removed.setdefault(target, []).append(content)
+        elif line.startswith("+") and current_new:
+            added.setdefault(current_new, set()).add(line[1:])
+    deleted_set = set(deleted_files)
+    for fname in deleted_files:
+        violations.append(err(
+            "log-tamper", f"task file {Path(fname).name} deleted {where}",
+            task=Path(fname).stem, severity="warning",
+            fix_hint="task files are never deleted (use ledger drop); "
+                     "restore it from git history"))
+    for fname, lines in removed.items():
+        if fname in deleted_set:
+            continue  # already reported as a whole-file deletion
+        gone = [x for x in lines if x not in added.get(fname, set())]
+        if gone:
+            violations.append(err(
+                "log-tamper",
+                f"{Path(fname).name}: {len(gone)} Log line(s) deleted {where}",
+                task=Path(fname).stem, severity="warning",
+                fix_hint="Log is append-only; restore the lines from git "
+                         "history"))
+
+
 def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
     violations: list[dict] = []
     repo = ctx.repo
@@ -2206,70 +2254,52 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
             f"{exempt_count}/{len(commits)} commit(s) in scope are exempt",
             severity="info"))
 
-    # log-tamper: Log bullet lines deleted across baseline..HEAD (best effort)
-    baseline = ctx.config.get("baseline")
+    # ---- log-tamper: append-only Log, verified HISTORICALLY ---------------
+    # A net baseline->now diff cannot see a Log line that was added after
+    # baseline and deleted later (it nets out). Instead:
+    #   (1) HEAD -> working tree: uncommitted tampering, caught BEFORE the
+    #       session's final commit (line deletions AND file deletions);
+    #   (2) every commit in scope, parent -> commit (one `git log -p` pass):
+    #       once a Log event enters repository history, no later state may
+    #       remove or alter it;
+    #   (3) merge commits diffed against EACH parent (`log -p` omits merge
+    #       diffs): any parent's Log line missing from the merge result was
+    #       dropped by the resolution — the keep-both-sides rule makes this
+    #       exact.
+    # The -c overrides pin the output format against user git config
+    # (diff.noprefix, diff.mnemonicPrefix, diff.external, core.quotePath).
     try:
         tasks_rel = ctx.tasks_dir.resolve().relative_to(repo.resolve()).as_posix()
     except ValueError:
-        tasks_rel = None  # ledger dir outside the repo: skip log-tamper
-    if baseline and tasks_rel and git_sha_exists(repo, baseline):
-        # whole-file deletion is the bluntest tamper: compare the task files
-        # recorded at baseline against what exists on disk now
-        # (core.quotePath=false: octal-escaped non-ASCII paths would silently
-        # dodge the .md-suffix matching below)
-        rc, out = run_git(["-c", "core.quotePath=false", "ls-tree", "-r",
-                           "--name-only", baseline, "--", tasks_rel], repo)
-        if rc == 0:
-            on_disk = ({p.name for p in ctx.tasks_dir.glob("*.md")}
-                       if ctx.tasks_dir.is_dir() else set())
-            for line in out.split("\n"):
-                name = Path(line.strip()).name
-                if line.strip().endswith(".md") and name not in on_disk:
-                    violations.append(err(
-                        "log-tamper",
-                        f"task file {name} present at baseline has been "
-                        "deleted", task=Path(name).stem, severity="warning",
-                        fix_hint="task files are never deleted (use ledger "
-                                 "drop); restore it from git history"))
-        # -c overrides + --no-ext-diff: user git config (diff.noprefix,
-        # diff.mnemonicPrefix, diff.external, core.quotePath) must not
-        # silently change the output format this parser depends on.
-        # Diffing baseline against the WORKING TREE (no HEAD arg) means the
-        # protocol's pre-commit session-end validate sees uncommitted
-        # Log-line deletions too, matching the file-deletion check above.
-        rc, out = run_git(["-c", "diff.noprefix=false",
-                           "-c", "diff.mnemonicPrefix=false",
-                           "-c", "core.quotePath=false",
-                           "diff", "--no-ext-diff", baseline, "--",
-                           tasks_rel], repo)
-        if rc == 0 and out:
-            current_file = None
-            removed: dict[str, list[str]] = {}
-            added: dict[str, set[str]] = {}
-            for line in out.split("\n"):
-                if line.startswith("diff --git"):
-                    current_file = None  # reset until the +++ header
-                elif line.startswith("+++ b/"):
-                    current_file = line[6:]
-                elif line.startswith("+++ "):
-                    current_file = None  # e.g. '+++ /dev/null' (deletion)
-                elif line.startswith("-") and not line.startswith("---") \
-                        and current_file:
-                    content = line[1:]
-                    if LOG_LINE_RE.match(content):
-                        removed.setdefault(current_file, []).append(content)
-                elif line.startswith("+") and current_file:
-                    added.setdefault(current_file, set()).add(line[1:])
-            for fname, lines in removed.items():
-                gone = [x for x in lines if x not in added.get(fname, set())]
-                if gone:
-                    violations.append(err(
-                        "log-tamper",
-                        f"{Path(fname).name}: {len(gone)} Log line(s) present at "
-                        "baseline were deleted", task=Path(fname).stem,
-                        severity="warning",
-                        fix_hint="Log is append-only; restore the lines from "
-                                 "git history"))
+        return violations  # ledger dir outside the repo: skip log-tamper
+    diff_cfg = ["-c", "diff.noprefix=false", "-c", "diff.mnemonicPrefix=false",
+                "-c", "core.quotePath=false"]
+    rc, out = run_git([*diff_cfg, "diff", "--no-ext-diff", "--no-renames",
+                       "HEAD", "--", tasks_rel], repo)
+    if rc == 0 and out:
+        _tamper_violations(out, "(uncommitted)", violations)
+    baseline = ctx.config.get("baseline")
+    range_spec = f"{baseline}..HEAD" if baseline else "HEAD"
+    rc, out = run_git([*diff_cfg, "log", "--no-show-signature", "--no-renames",
+                       "--format=%x01%H", "-p", range_spec, "--", tasks_rel],
+                      repo)
+    if rc == 0 and out:
+        for record in out.split("\x01"):
+            if not record.strip():
+                continue
+            sha, _, patch = record.partition("\n")
+            _tamper_violations(patch, f"in commit {sha.strip()[:7]}",
+                               violations)
+    for c in commits:
+        if len(c.parents) > 1:
+            for parent in c.parents:
+                rc, out = run_git([*diff_cfg, "diff", "--no-ext-diff",
+                                   "--no-renames", parent, c.sha, "--",
+                                   tasks_rel], repo)
+                if rc == 0 and out:
+                    _tamper_violations(
+                        out, f"in merge {c.sha7} (vs parent {parent[:7]})",
+                        violations)
     return violations
 
 

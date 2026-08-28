@@ -1,10 +1,12 @@
 ---
 id: T-c8irt4
 title: Historical append-only Log verification
-status: todo
+status: in_progress
 priority: p1
 size: m
 created: 2026-08-28T11:54:59Z
+claimed_by: claude-2026-08-28-a
+claimed_at: 2026-08-28T12:08:02Z
 tags: integrity
 ---
 
@@ -28,3 +30,4 @@ Implementation notes:
 ## Log
 
 - 2026-08-28T11:54:59Z [claude-2026-08-28-a] add: created: Historical append-only Log verification
+- 2026-08-28T12:08:02Z [claude-2026-08-28-a] claim: claimed
