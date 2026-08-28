@@ -1,12 +1,11 @@
 ---
 id: T-c8irt4
 title: Historical append-only Log verification
-status: in_progress
+status: done
 priority: p1
 size: m
 created: 2026-08-28T11:54:59Z
-claimed_by: claude-2026-08-28-a
-claimed_at: 2026-08-28T12:08:02Z
+closed: 2026-08-28T12:12:06Z
 tags: integrity
 ---
 
@@ -27,7 +26,11 @@ Implementation notes:
 
 ## Commits
 
+- 372f56e 2026-08-28 Verify append-only Log history commit by commit
+
 ## Log
 
 - 2026-08-28T11:54:59Z [claude-2026-08-28-a] add: created: Historical append-only Log verification
 - 2026-08-28T12:08:02Z [claude-2026-08-28-a] claim: claimed
+- 2026-08-28T12:12:06Z [claude-2026-08-28-a] link: 372f56e (backfilled from trailer)
+- 2026-08-28T12:12:06Z [claude-2026-08-28-a] done: evidence: 372f56e
