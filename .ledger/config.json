@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "prefix": "T",
+  "baseline": null,
+  "stale_claim_days": 7,
+  "exempt_patterns": [
+    "^Merge ",
+    "^Revert "
+  ]
+}
