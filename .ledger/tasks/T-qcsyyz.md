@@ -1,12 +1,11 @@
 ---
 id: T-qcsyyz
 title: Fix same-second ordering flake in the resource-lease test
-status: in_progress
+status: done
 priority: p1
 size: xs
 created: 2026-09-02T03:48:07Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T03:48:07Z
+closed: 2026-09-02T03:48:21Z
 tags: infra
 ---
 
@@ -30,7 +29,11 @@ A test-only helper that asserts order-insensitively, or a conftest fixture that 
 
 ## Commits
 
+- 76c20e2 2026-09-01 Pin a same-second ordering tie in the resource-lease test
+
 ## Log
 
 - 2026-09-02T03:48:07Z [claude-2026-09-01-b] add: created: Fix same-second ordering flake in the resource-lease test [p1/xs] (tags: infra)
 - 2026-09-02T03:48:07Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T03:48:21Z [claude-2026-09-01-b] link: 76c20e2 Pin a same-second ordering tie in the resource-lease test
+- 2026-09-02T03:48:21Z [claude-2026-09-01-b] done: evidence: 76c20e2
