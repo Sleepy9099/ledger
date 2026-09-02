@@ -1,10 +1,12 @@
 ---
 id: T-ntt2zz
 title: ledger search: ranked text search across task files
-status: todo
+status: in_progress
 priority: p2
 size: s
 created: 2026-09-01T23:48:39Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T01:48:18Z
 tags: discovery, ergonomics
 ---
 
@@ -54,9 +56,9 @@ No file-format, header, enum, Log or validate change. On a pre-search vendored c
 
 ## Next Steps
 
-- [ ] Implement cmd_search over load_all_tasks with raw-section fields, AND/--any, --regex, --in, --status/--open, -n, snippets
-- [ ] Edit the 'Discover new work?' bullet in PROTOCOL_TEXT; re-run init in this repo; README Daily commands; DESIGN §5/§9 and Appendix decision 25
-- [ ] tests/test_search.py plus envelope and lock-free list entries
+- [x] Implement cmd_search over load_all_tasks with raw-section fields, AND/--any, --regex, --in, --status/--open, -n, snippets
+- [x] Edit the 'Discover new work?' bullet in PROTOCOL_TEXT; re-run init in this repo; README Daily commands; DESIGN §5/§9 and Appendix decision 25
+- [x] tests/test_search.py plus envelope and lock-free list entries
 
 ## Open Questions
 
@@ -69,3 +71,7 @@ No file-format, header, enum, Log or validate change. On a pre-search vendored c
 - 2026-09-01T23:48:41Z [claude-2026-09-01-a] step: added 'Edit the 'Discover new work?' bullet in PROTOCOL_TEXT; re-run init in this repo; README Daily commands; DESIGN §5/§9 and Appendix decision 25'
 - 2026-09-01T23:48:41Z [claude-2026-09-01-a] step: added 'tests/test_search.py plus envelope and lock-free list entries'
 - 2026-09-02T00:06:25Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: next -n defaults to 1 (only the flag name is mirrored); added a pre-implementation search clause routed through T-w0emnj's PROTOCOL_TEXT budget
+- 2026-09-02T01:48:18Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T01:50:22Z [claude-2026-09-01-b] step: checked 'Implement cmd_search over load_all_tasks with raw-section fields, AND/--any, --regex, --in, --status/--open, -n, snippets'
+- 2026-09-02T01:50:22Z [claude-2026-09-01-b] step: checked 'Edit the 'Discover new work?' bullet in PROTOCOL_TEXT; re-run init in this repo; README Daily commands; DESIGN §5/§9 and Appendix decision 25'
+- 2026-09-02T01:50:22Z [claude-2026-09-01-b] step: checked 'tests/test_search.py plus envelope and lock-free list entries'

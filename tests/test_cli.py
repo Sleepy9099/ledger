@@ -20,8 +20,8 @@ def test_init_idempotent_and_bootstrap_files(repo):
     # the repair the protocol promises for a pushed commit is true (T-5z04ex)
     protocol = (ledger / "PROTOCOL.md").read_text(encoding="utf-8")
     for phrase in ("--add-depends", "not the action", "ready for integration",
-                   "not scope expansion"):
-        assert phrase in protocol and phrase in claude  # T-w0emnj
+                   "not scope expansion", "ledger search"):
+        assert phrase in protocol and phrase in claude  # T-w0emnj, T-ntt2zz
     assert "ledger link <id> <sha>" in protocol
     assert "explicit link counts as coverage" in protocol
     assert "Unpushed: amend" in protocol
@@ -316,7 +316,7 @@ def test_every_command_emits_envelope(repo):
         ("question", tid, "add", "q?"), ("claim", tid), ("release", tid),
         ("block", tid, "--on", "human"), ("unblock", tid),
         ("set", tid, "--priority", "p1"), ("scan",), ("validate",),
-        ("doctor",),
+        ("doctor",), ("search", "x"),
     ]
     for call in calls:
         r = repo.run(*call, "--json")

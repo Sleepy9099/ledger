@@ -18,14 +18,19 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
    it — report that to the human instead of inventing work.
 3. `ledger questions --human --json` — surface anything listed to the
    human in your first message.
+4. Before implementing, `ledger search <symbol|component|error> --json`
+   surfaces prior dead ends and landmines recorded on other tasks.
 
 ## While working
 
 - One intent, one verb — prose in a note controls nothing:
   fact / dead end    -> `ledger note <id> "..."` (`--dead-end` for what
                         did NOT work — it is the most valuable breadcrumb)
-  new obligation     -> `ledger add "title" -p p2 -s s --spec -` (spec via
-                        stdin; never a note saying "someone should")
+  new obligation     -> `ledger search <symbol|component|error> --json`
+                        first: an open task covers it -> enrich it (`note` /
+                        `step add`); must follow it -> `add --after <id>`;
+                        else `ledger add "title" -p p2 -s s --spec -` (spec
+                        via stdin; never a note saying "someone should")
   X must land first  -> `ledger add --after X` / `set <id> --add-depends X`
                         (`next` clears it when X is done; a dropped X
                         never satisfies — `drop` hints `--remove-depends`)

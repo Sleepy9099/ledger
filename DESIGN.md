@@ -197,8 +197,8 @@ Commands: `init`, `add`, `list`, `show`, `next [--claim]`, `claim [--force]`,
 `release [--blocked --on]`, `set`, `note`, `step add|check|uncheck`,
 `question add|resolve`, `questions [--human]`, `block --on` / `unblock`,
 `link`, `scan [--write]`, `done [--commit|--no-code|--force]`, `drop --why`,
-`validate [--coverage] [--strict] [--no-git]`, `doctor`. (Exact flags:
-`--help` or README.)
+`validate [--coverage] [--strict] [--no-git]`, `doctor`, `search`. (Exact
+flags: `--help` or README.)
 
 Notable semantics:
 
@@ -403,8 +403,9 @@ reduces to git's per-line merge on one small Markdown file.
 
 Canonical text lives in `.ledger/PROTOCOL.md`; `init` maintains the same block
 in `CLAUDE.md` between `<!-- LEDGER:BEGIN/END -->` markers. Summary: session
-start = `next --claim --json` + read the file + surface `questions --human`;
-while working = one intent, one verb (`note` a fact, `add` an obligation,
+start = `next --claim --json` + read the file + surface `questions --human`
++ `search` the symbol before implementing; while working = one intent, one
+verb (`note` a fact, `search` then `add` an obligation,
 `--after` / `--add-depends` an ordering, `block` a blocker, `question
 --human` a decision, `drop --duplicate-of` a duplicate — a note asking a
 future session to act is not the action), trailer every commit; finish =
@@ -510,3 +511,13 @@ deterministic token-overlap hint; a model's opinion must never gate CI).
     CI validate is the only enforcement layer.
 24. **`next` skips xl tasks** and says so in `why` — forces decomposition at
     the moment it matters.
+25. **`search` is an on-demand O(n) scan** over `load_all_tasks` with
+    code-constant field weights (title 8, id 6, tags 6, spec 4, steps 3,
+    questions 3, commits 2, log 1, +1 open) over RAW section text; no
+    index or cache file — the derived cache remains T-8jrndl's separate,
+    opt-in decision. It stays on the CLI side of the §11 spec-editing cut
+    because it is structure-aware (typed hits, header rows), not a grep
+    replacement; `git grep T-xxxxxx` remains the answer for a known id. It
+    never feeds `validate`, `done` or coverage — results are retrieval
+    hints. Pre-search vendored copies fail with argparse exit 3 and no
+    envelope: treat a JSON decode failure on `search` as "stale copy".

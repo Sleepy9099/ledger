@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.1.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 5
+PROTOCOL_VERSION = 6
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -148,14 +148,19 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
    it — report that to the human instead of inventing work.
 3. `ledger questions --human --json` — surface anything listed to the
    human in your first message.
+4. Before implementing, `ledger search <symbol|component|error> --json`
+   surfaces prior dead ends and landmines recorded on other tasks.
 
 ## While working
 
 - One intent, one verb — prose in a note controls nothing:
   fact / dead end    -> `ledger note <id> "..."` (`--dead-end` for what
                         did NOT work — it is the most valuable breadcrumb)
-  new obligation     -> `ledger add "title" -p p2 -s s --spec -` (spec via
-                        stdin; never a note saying "someone should")
+  new obligation     -> `ledger search <symbol|component|error> --json`
+                        first: an open task covers it -> enrich it (`note` /
+                        `step add`); must follow it -> `add --after <id>`;
+                        else `ledger add "title" -p p2 -s s --spec -` (spec
+                        via stdin; never a note saying "someone should")
   X must land first  -> `ledger add --after X` / `set <id> --add-depends X`
                         (`next` clears it when X is done; a dropped X
                         never satisfies — `drop` hints `--remove-depends`)
@@ -2789,6 +2794,118 @@ def cmd_validate(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# search: ranked text retrieval across task files (read-only, no index)
+# ---------------------------------------------------------------------------
+
+SEARCH_FIELDS = ("title", "id", "tags", "spec", "steps", "questions",
+                 "commits", "log")
+# code constants, not config keys, never stored (this is not the stored
+# rank cut by decision #16)
+SEARCH_WEIGHTS = {"title": 8, "id": 6, "tags": 6, "spec": 4, "steps": 3,
+                  "questions": 3, "commits": 2, "log": 1}
+SNIPPET_WIDTH = 160
+
+
+def _search_texts(task: Task) -> dict[str, str]:
+    """Fields over RAW section text so nothing in a task file is
+    unreachable (the structured views drop prose, HUMAN: markers, verbs)."""
+    return {"id": task.id, "title": task.title, "tags": ", ".join(task.tags),
+            "spec": task.get_section("Spec"),
+            "steps": task.get_section("Next Steps"),
+            "questions": task.get_section("Open Questions"),
+            "commits": task.get_section("Commits"),
+            "log": task.get_section("Log")}
+
+
+def _snippet(text: str, pattern: re.Pattern) -> str | None:
+    for line in text.split("\n"):
+        if not pattern.search(line):
+            continue
+        line = re.sub(r"\s+", " ", line).strip()
+        m = pattern.search(line)
+        centre = m.start() if m else 0
+        start = max(0, centre - SNIPPET_WIDTH // 2)
+        end = start + SNIPPET_WIDTH
+        out = line[start:end]
+        if start > 0:
+            out = "…" + out[1:]
+        if end < len(line):
+            out = out[:-1] + "…"
+        return out
+    return None
+
+
+def cmd_search(args) -> int:
+    ctx = make_ctx(args)  # read-only: no mutation lock
+    fields = list(SEARCH_FIELDS)
+    if args.in_fields:
+        fields = [f.strip() for f in args.in_fields.split(",") if f.strip()]
+        unknown = [f for f in fields if f not in SEARCH_FIELDS]
+        if unknown or not fields:
+            raise LedgerError(
+                "usage", f"unknown --in field(s): {', '.join(unknown) or '(none)'}",
+                exit_code=3, fix_hint="fields: " + ", ".join(SEARCH_FIELDS))
+    patterns = []
+    for term in args.terms:
+        try:
+            patterns.append(re.compile(term if args.regex else re.escape(term),
+                                       re.I))
+        except re.error as e:
+            raise LedgerError("usage", f"invalid regex {term!r}: {e}",
+                              exit_code=3,
+                              fix_hint="fix the pattern, or drop --regex for "
+                                       "a literal substring match")
+    tasks, problems = load_all_tasks(ctx)
+    rows = []
+    for task in tasks:
+        if args.open and task.status not in OPEN_STATUSES:
+            continue
+        if args.status and task.status not in args.status:
+            continue
+        texts = _search_texts(task)
+        score, hits, matched, snippets = 0, 0, set(), {}
+        for pat in patterns:
+            best = None
+            for field in fields:
+                if pat.search(texts[field]):
+                    matched.add(field)
+                    snippets.setdefault(field, _snippet(texts[field], pat))
+                    weight = SEARCH_WEIGHTS[field]
+                    best = weight if best is None else max(best, weight)
+            if best is not None:
+                hits += 1
+                score += best
+        if not (hits > 0 if args.any else hits == len(patterns)):
+            continue
+        if task.status in OPEN_STATUSES:
+            score += 1
+        rows.append((score, task,
+                     sorted(matched, key=lambda f: -SEARCH_WEIGHTS[f]),
+                     snippets))
+    rows.sort(key=lambda r: (-r[0], sort_key(r[1])))
+    count = len(rows)
+    rows = rows[:max(args.n, 0)]
+    out = []
+    human = []
+    for score, task, matched, snippets in rows:
+        out.append({**task_brief(task), "score": score, "matched_in": matched,
+                    "snippets": snippets})
+        human.append(f"{task.id}  {task.status}  {task.priority}  "
+                     f"{task.size:<2}  {task.title}  [{','.join(matched)}]")
+        for field in matched:
+            if snippets.get(field):
+                human.append(f"    {field}: {snippets[field]}")
+    if not rows:
+        human.append(f"no task matches ({count} hit(s))")
+    data = {"query": {"terms": list(args.terms),
+                      "mode": "any" if args.any else "all",
+                      "regex": bool(args.regex), "fields": fields},
+            "count": count, "tasks": out}
+    emit(args, True, data, errors=problems, human=human)
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # doctor: offline version / compatibility report
 # ---------------------------------------------------------------------------
 
@@ -3087,6 +3204,21 @@ def build_parser() -> Parser:
     p.add_argument("--no-git", action="store_true",
                    help="skip git-backed checks (exported trees)")
     p.set_defaults(fn=cmd_validate)
+
+    p = sub.add_parser("search", parents=[common],
+                       help="ranked text search across task files")
+    p.add_argument("terms", nargs="+", metavar="TERM",
+                   help="case-insensitive substring (all terms must hit)")
+    p.add_argument("--any", action="store_true", help="OR the terms")
+    p.add_argument("--regex", action="store_true",
+                   help="treat every term as a regular expression")
+    p.add_argument("--in", dest="in_fields", metavar="FIELD[,FIELD]",
+                   help="restrict to: " + ", ".join(SEARCH_FIELDS))
+    p.add_argument("--status", action="append", choices=STATUSES)
+    p.add_argument("--open", action="store_true",
+                   help="open statuses only (default: every status)")
+    p.add_argument("-n", type=int, default=20, help="max rows (default 20)")
+    p.set_defaults(fn=cmd_search)
 
     p = sub.add_parser("doctor", parents=[common],
                        help="offline version/compatibility report (exit 1 "

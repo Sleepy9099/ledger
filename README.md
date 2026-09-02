@@ -84,6 +84,9 @@ list --depends-on <id> [--tag wave]  show carries dependents; this is the
                                      reverse lookup, e.g. which wave held T-x)
 set <id> --priority|--size|--title   edit header fields; --add-depends /
     |--add-depends|--remove-depends  --remove-depends keep the DAG honest
+search TERM... [--any] [--regex]     ranked retrieval across every task
+    [--in title,spec,log] [--open]   (search before filing; dead ends and
+                                     landmines live on other tasks)
 note <id> "text" [--dead-end]        append a Log breadcrumb (--dead-end
                                      marks what did NOT work: selectable)
 step <id> add|check|uncheck <n|text> manage Next Steps checkboxes
