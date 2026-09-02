@@ -1,10 +1,12 @@
 ---
 id: T-otkmmt
 title: init from the vendored copy must say the tool was not copied
-status: todo
+status: in_progress
 priority: p2
 size: xs
 created: 2026-09-02T08:54:44Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T09:12:54Z
 tags: distribution
 ---
 
@@ -27,3 +29,4 @@ tags: distribution
 ## Log
 
 - 2026-09-02T08:54:44Z [claude-2026-09-01-b] add: created: init from the vendored copy must say the tool was not copied [p2/xs] (tags: distribution)
+- 2026-09-02T09:12:54Z [claude-2026-09-01-b] claim: claimed

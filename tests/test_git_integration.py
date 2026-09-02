@@ -60,6 +60,14 @@ def test_linked_never_claimed_warning(repo):
     rc, payload = validate(repo)
     assert rc == 0  # warning tier
     assert "linked-never-claimed" in codes(payload)
+    hint = [e for e in payload["errors"]
+            if e["code"] == "linked-never-claimed"][0]["fix_hint"]
+    # the commit has landed: the hint must name the remedy for THAT state
+    assert f"ledger claim {tid}" in hint and "release" in hint
+    repo.j("claim", tid)
+    repo.j("release", tid, "--note", "recorded after the fact")
+    rc, payload = validate(repo, "--strict")
+    assert rc == 0 and "linked-never-claimed" not in codes(payload)
 
 
 def test_sha_unreachable_warning(repo):
@@ -698,3 +706,38 @@ def test_unlink_is_explicit_journaled_and_loud(repo):
     assert "done-evidence" in codes(payload)
     assert any(e["code"] == "coverage" and sha[:7] in e["message"]
                for e in payload["errors"])
+
+
+
+def test_exempt_policy_preview_is_a_dry_run(repo):
+    (repo.root / "src").mkdir()
+    (repo.root / "src" / "x.py").write_text("x\n", encoding="utf-8")
+    (repo.root / "gen.lock").write_text("l\n", encoding="utf-8")
+    sha = repo.commit_all("Exempt with code", ("Ledger-Exempt: misc",))
+    (repo.root / "docs").mkdir()
+    (repo.root / "docs" / "d.md").write_text("d\n", encoding="utf-8")
+    repo.commit_all("Exempt docs", ("Ledger-Exempt: docs",))
+    _set_policy(repo, None)  # policy off: the preview uses the defaults
+    d = repo.j("scan", "--exempt-policy-preview")["data"]
+    pv = d["exempt_policy_preview"]
+    assert pv["policy_active"] is False and pv["would_violate"] == 1
+    assert pv["commits"][0]["sha"] == sha[:7]
+    assert pv["commits"][0]["paths"] == ["src/x.py"]  # gen.lock is allowed
+    assert "forward-only" in pv["note"]
+    assert "docs/**" in pv["globs"]
+    r = repo.run("scan", "--exempt-policy-preview")
+    assert "would violate" in r.stdout
+    # the preview ignores exempt_policy_since: the switch is what it measures
+    _set_policy(repo, ["docs/**", "*.md", ".gitignore", ".gitattributes"])
+    _set_policy_since(repo, repo.git("rev-parse", "HEAD").stdout.strip())
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]  # forward-only: nothing checked yet
+    pv = repo.j("scan", "--exempt-policy-preview")["data"]["exempt_policy_preview"]
+    assert pv["policy_active"] is True and pv["would_violate"] == 1
+    assert pv["globs"][:2] == [".ledger/**", "docs/**"]
+    assert "exempt_policy_preview" not in repo.j("scan")["data"]  # opt-in
+    off = [e for e in repo.j("doctor")["errors"] if e["code"] == "exempt-policy-off"]
+    assert off == []
+    _set_policy(repo, None)
+    off = [e for e in repo.j("doctor")["errors"] if e["code"] == "exempt-policy-off"]
+    assert "--exempt-policy-preview" in off[0]["fix_hint"]

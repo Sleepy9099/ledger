@@ -182,3 +182,28 @@ def test_malformed_config_types_are_config_errors_not_tracebacks(plain):
         assert payload["errors"][0]["fix_hint"], key
     cfg_path.write_text(json.dumps(good, indent=2), encoding="utf-8")
     assert plain.j("list")["ok"]
+
+
+
+def test_init_reports_whether_the_tool_was_copied(repo):
+    import re as _re
+    import subprocess as _sp
+    import sys as _sys
+    from conftest import SCRIPT
+    d = repo.j("init")  # the fixture runs the vendored copy on itself
+    assert d["data"]["tool_copied"] is False
+    r = repo.run("init")
+    assert "running the vendored copy" in r.stdout
+    vendored = repo.root / ".ledger" / "ledger.py"
+    vendored.write_text(_re.sub(r'^TOOL_VERSION = "[^"]+"',
+                                'TOOL_VERSION = "0.0.1"',
+                                vendored.read_text(encoding="utf-8"),
+                                count=1, flags=_re.M),
+                        encoding="utf-8", newline="\n")
+    r = _sp.run([_sys.executable, str(SCRIPT), "init", "--json"],
+                cwd=str(repo.root), env=repo.env, capture_output=True,
+                text=True)
+    payload = json.loads(r.stdout)
+    assert payload["ok"] and payload["data"]["tool_copied"] is True
+    assert 'TOOL_VERSION = "0.0.1"' not in vendored.read_text(encoding="utf-8")
+    assert repo.j("doctor")["data"]["vendored_tool_version"] != "0.0.1"

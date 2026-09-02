@@ -211,8 +211,10 @@ merge's conflict-resolution content counts — may touch only matching paths;
 anything else is an `exempt-policy` error naming the offending paths (the
 commit stays exempt, so `coverage` never fires alongside). Existing repos
 (key absent) are unchanged until they opt in: `ledger doctor` says so
-(`exempt-policy-off`), and `python .ledger/ledger.py init
---enable-exempt-policy` turns it on FORWARD-ONLY — it writes the default
+(`exempt-policy-off`), `ledger scan --exempt-policy-preview` shows the blast
+radius first (which landed exempt commits would violate the globs, with
+their paths — a dry run that ignores `exempt_policy_since`), and `python
+.ledger/ledger.py init --enable-exempt-policy` turns it on FORWARD-ONLY — it writes the default
 globs plus `exempt_policy_since: <HEAD>`, and commits that are ancestors of
 that sha are never path-checked, so adopting the policy never rewrites
 history (commit that config change with a trailer or `Ledger-Exempt:

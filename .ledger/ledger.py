@@ -1762,7 +1762,10 @@ def cmd_init(args) -> int:
     (ledger_dir / "tasks").mkdir(exist_ok=True)
 
     dest_script = ledger_dir / "ledger.py"
-    if dest_script.resolve() != script:
+    # running the vendored copy on itself regenerates scaffolding only: say
+    # so, because the tool is NOT updated that way (run the newer file)
+    tool_copied = dest_script.resolve() != script
+    if tool_copied:
         atomic_write(dest_script, script.read_text(encoding="utf-8"))
 
     cfg_path = ledger_dir / "config.json"
@@ -1842,6 +1845,9 @@ def cmd_init(args) -> int:
     human = [
         f"ledger initialized at {ledger_dir}",
         f"baseline: {baseline_note}",
+        (f"tool: copied from {script}" if tool_copied else
+         "tool: unchanged — running the vendored copy (run init from the "
+         "newer ledger.py to re-vendor)"),
         "",
         "Commit the bootstrap with:  git add -A && git commit -m 'Add task ledger' "
         "-m 'Ledger-Exempt: ledger bootstrap'",
@@ -1854,6 +1860,7 @@ def cmd_init(args) -> int:
     emit(args, True, {"ledger_dir": str(ledger_dir),
                       "baseline": config.get("baseline"),
                       "created": created, "ci_snippet": CI_SNIPPET,
+                      "tool_copied": tool_copied,
                       "adapters": adapters,
                       "exempt_policy": {
                           "active": config.get("exempt_allowed_paths") is not None,
@@ -2882,6 +2889,12 @@ def cmd_scan(args) -> int:
     id_token_re = id_token_pattern(ctx.prefix)
     linked, exempt, unlinked, dangling, policy_violations = [], [], [], [], []
     by_channel = {"trailer": 0, "pattern": 0, "bookkeeping": 0}
+    # dry run: what the globs WOULD flag over every landed exempt commit,
+    # ignoring exempt_policy_since — the blast radius before the switch
+    preview_on = getattr(args, "exempt_policy_preview", False)
+    preview_globs = (policy if policy is not None
+                     else [".ledger/**"] + list(DEFAULT_EXEMPT_ALLOWED_PATHS))
+    preview_rows: list[dict] = []
     for c in commits:
         bucket, bad_ids = classify_commit(c, repo, known, exempt_res, explicit)
         for raw in bad_ids:
@@ -2904,6 +2917,13 @@ def cmd_scan(args) -> int:
                    else None)
             if bad:
                 policy_violations.append({"sha": c.sha7, "paths": bad})
+            if preview_on:
+                would = exempt_policy_offenders(c, repo, preview_globs,
+                                                exempt_res)
+                if would:
+                    preview_rows.append({"sha": c.sha7, "subject": c.subject,
+                                         "paths": would[:5],
+                                         "n_paths": len(would)})
         else:
             unlinked.append({"sha": c.sha7, "subject": c.subject})
     backfilled, pruned = [], []
@@ -2940,6 +2960,24 @@ def cmd_scan(args) -> int:
     for v in policy_violations:
         human.append(f"  exempt-policy {v['sha']}: touches "
                      + ", ".join(v["paths"][:3]))
+    if preview_on:
+        data["exempt_policy_preview"] = {
+            "policy_active": policy is not None,
+            "globs": preview_globs,
+            "would_violate": len(preview_rows),
+            "commits": preview_rows[:50],
+            "note": "init --enable-exempt-policy is forward-only from HEAD: "
+                    "none of these landed commits would be checked; a "
+                    "hand-planted exempt_allowed_paths without "
+                    "exempt_policy_since checks all of them",
+        }
+        human.append(
+            f"  exempt-policy preview: {len(preview_rows)} landed exempt "
+            f"commit(s) would violate the globs if applied retroactively "
+            "(init --enable-exempt-policy is forward-only: 0 checked)")
+        for r in preview_rows[:10]:
+            human.append(f"    {r['sha']} {r['subject'][:40]}: "
+                         + ", ".join(r["paths"][:3]))
     for s in similar_pairs[:20]:
         human.append(f"  similar open titles: {s['a']} ~ {s['b']} "
                      f"({s['score']}) — ledger drop <dup> --duplicate-of "
@@ -3624,7 +3662,12 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
                     "linked-never-claimed",
                     f"commit {c.sha7} claims {tid}, which was never claimed",
                     task=tid, severity="warning",
-                    fix_hint="claim tasks before committing against them"))
+                    fix_hint=f"the commit has landed — record the engagement "
+                             f"now: ledger claim {tid} then ledger release "
+                             f"{tid} --note \"...\" (or ledger done {tid} if "
+                             "the work is finished); the warning clears once "
+                             "a claim line exists. Going forward, claim before "
+                             "committing."))
 
     if not coverage:
         return violations
@@ -4346,9 +4389,11 @@ def cmd_doctor(args) -> int:
             "exempt-policy-off",
             "exempt_allowed_paths is not set: a Ledger-Exempt commit may touch "
             "any path (the pre-1.2 behavior)", severity="warning",
-            fix_hint="python .ledger/ledger.py init --enable-exempt-policy "
-                     "turns it on forward-only from HEAD; adjust the globs in "
-                     ".ledger/config.json as a project decision"))
+            fix_hint="preview the blast radius with `ledger scan "
+                     "--exempt-policy-preview`; then `python .ledger/ledger.py "
+                     "init --enable-exempt-policy` turns it on forward-only "
+                     "from HEAD; adjust the globs in .ledger/config.json as a "
+                     "project decision"))
     data = {
         "exempt_policy": exempt_policy,
         "tool_version": TOOL_VERSION,
@@ -4585,6 +4630,10 @@ def build_parser() -> Parser:
     p.add_argument("--prune", action="store_true",
                    help="also drop cited shas no longer reachable from HEAD "
                         "(implies --write; each removal is journaled)")
+    p.add_argument("--exempt-policy-preview", action="store_true",
+                   help="dry run: which landed exempt commits the "
+                        "exempt_allowed_paths globs (or the defaults) would "
+                        "flag, ignoring exempt_policy_since")
     p.set_defaults(fn=cmd_scan)
 
     p = sub.add_parser("done", parents=[common],
