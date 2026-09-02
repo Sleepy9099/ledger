@@ -1,12 +1,11 @@
 ---
 id: T-eb6bas
 title: list --mine and next.held for multi-claim sessions
-status: in_progress
+status: done
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T02:08:47Z
+closed: 2026-09-02T02:19:43Z
 tags: ownership, ergonomics
 ---
 
@@ -42,6 +41,8 @@ No files or fields; derived at read time; `next --claim` computes `held` under t
 
 ## Commits
 
+- a8b4d03 2026-09-01 Add list --mine and next.held for multi-claim sessions
+
 ## Log
 
 - 2026-09-01T23:48:40Z [claude-2026-09-01-a] add: created: list --mine and next.held for multi-claim sessions
@@ -54,3 +55,5 @@ No files or fields; derived at read time; `next --claim` computes `held` under t
 - 2026-09-02T02:14:42Z [claude-2026-09-01-b] step: checked 'next: held on both emit paths (+ human 'also holding:' lines); fix the self-takeover Log line'
 - 2026-09-02T02:14:42Z [claude-2026-09-01-b] step: checked 'PROTOCOL_TEXT session-end step (plural, release --blocked for held blocked tasks); re-run init; README; DESIGN §9'
 - 2026-09-02T02:14:42Z [claude-2026-09-01-b] step: checked 'Tests with --session a/--session b'
+- 2026-09-02T02:19:43Z [claude-2026-09-01-b] link: a8b4d03 Add list --mine and next.held for multi-claim sessions
+- 2026-09-02T02:19:43Z [claude-2026-09-01-b] done: evidence: a8b4d03
