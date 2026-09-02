@@ -258,6 +258,45 @@ PROTOCOL.md / the CLAUDE.md block match this copy's protocol text
 answers with argparse exit 3 and no JSON envelope — treat that as "tool
 predates doctor: re-vendor".
 
+## Refusal and warning codes (CLI-only; validation codes are in DESIGN §6)
+
+Every `errors[]` row carries `code`, `severity`, `message` and, for error
+rows, a `fix_hint`. Exit: 0 ok (warnings/info may still be present), 1 a
+validation or read failure, 2 a refusal, 3 a usage error. `list
+--blocked-on "external: ready"` is the integrator queue.
+
+| code | exit | when |
+|---|---|---|
+| `already-holding` | 2 | next --claim while this session holds a fresh claim (brief/release it, or --force) |
+| `ambiguous-id` | 2 | an id fragment matches several tasks |
+| `ambiguous-selector` | 2 | a step/question substring matches several lines |
+| `bad-row` | 2 | an answers apply row has no task |
+| `bad-state` | 2 | the verb does not apply to the task's status (closed is terminal; not blocked; ...) |
+| `claim-held` | 2 | another session holds a fresh claim (--force to take over) |
+| `config` | 2 | config.json unreadable or a key has the wrong type/value |
+| `corrupt-file` | 2 | structurally broken task file: read-only until repaired |
+| `duplicate-target` | 2 | two answers apply rows resolve to one question |
+| `exempt-policy-off` | 0 | doctor: exempt_allowed_paths is not set (warning) |
+| `internal` | 2 | an unexpected exception (traceback on stderr) |
+| `lock-timeout` | 2 | another ledger process held the mutation lock too long |
+| `no-git` | 2 | the verb needs a git repository |
+| `no-such-commit` | 2 | link: the ref does not resolve to a commit |
+| `no-such-commit-line` | 2 | unlink: the sha is not cited |
+| `no-such-question` | 2 | no unanswered question matches |
+| `no-such-step` | 2 | no step matches |
+| `no-such-task` | 2 | no task id matches |
+| `not-initialized` | 2 | refusal |
+| `nothing-to-repair` | 2 | repair: the header is already coherent |
+| `protocol-stale` | 0 | doctor: a protocol file lags PROTOCOL_TEXT (warning) |
+| `prune-refused` | 1 | scan --prune: a done task's last evidence was kept; link the replacement |
+| `resource-held` | 2 | claim/unblock/set: another fresh claim leases the resource (--force) |
+| `schema-mismatch` | 1 | doctor: the corpus is newer than this ledger.py |
+| `session-fallback` | 0 | claim: acting as the git user name, no LEDGER_SESSION (warning) |
+| `similar-task` | 0 | add: a similar title exists (warning) |
+| `usage` | 3 | invalid arguments or input |
+| `vendored-stale` | 0 | doctor: the vendored copy differs from the running one (warning) |
+| `would-corrupt` | 2 | a write would not survive a parse round-trip |
+
 ## Merge rules (also in PROTOCOL.md)
 
 - Parallel `add`s never conflict (different files).

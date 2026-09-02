@@ -23,10 +23,12 @@ def test_init_idempotent_and_bootstrap_files(repo):
                    "not scope expansion", "ledger search", "bounded digest",
                    "`--full`", "list --mine", "indented lines",
                    "no product-work obligation", "exempt_allowed_paths",
-                   "Closed is terminal"):
+                   "Closed is terminal", "SAME final paragraph",
+                   "ledger claim <id>", "--in spec,log", "own `HUMAN:`",
+                   "--blocked-on", "`ok` is the success"):
         assert phrase in protocol and phrase in claude  # T-w0emnj, T-ntt2zz
     assert "ledger link <id> <sha>" in protocol
-    assert "explicit link counts as coverage" in protocol
+    assert "counts as coverage" in protocol
     assert "Unpushed: amend" in protocol
     # re-init must not duplicate the protocol block or gitattributes line
     repo.j("init")
@@ -1221,3 +1223,49 @@ def test_report_final_commit_needs_no_git_per_pair(ledger_mod, repo,
     payload = json.loads(capsys.readouterr().out)
     assert rc == 0 and payload["data"]["commits"]["final_commit"] == head
     assert "merge-base" not in calls
+
+
+
+# --- contract pass (sweep 2026-09-02, task I) --------------------------------
+
+def test_usage_errors_keep_the_json_envelope(repo):
+    tid = repo.add_task("Usage")
+    r = repo.run("step", tid, "check", "--json")  # missing positional
+    assert r.returncode == 3
+    payload = json.loads(r.stdout)
+    assert payload["ok"] is False and payload["errors"][0]["code"] == "usage"
+    assert payload["errors"][0]["fix_hint"]
+    r = repo.run("frobnicate", "--json")
+    assert r.returncode == 3 and json.loads(r.stdout)["ok"] is False
+    r = repo.run("step", tid, "check")  # no --json: plain text on stderr
+    assert r.returncode == 3 and r.stdout == "" and "usage" in r.stderr
+
+
+def test_list_blocked_on_is_the_integrator_queue(repo):
+    ready = repo.add_task("Ready one")
+    repo.j("claim", ready)
+    repo.j("release", ready, "--blocked", "--on",
+           "external: ready for integration")
+    parked = repo.add_task("Parked")
+    repo.j("block", parked, "--on", "external: wave open")
+    human = repo.add_task("Human gate")
+    repo.j("block", human, "--on", "human")
+    rows = repo.j("list", "--blocked-on", "external: ready")["data"]["tasks"]
+    assert [t["id"] for t in rows] == [ready]
+    rows = repo.j("list", "--blocked-on", "external:")["data"]["tasks"]
+    assert {t["id"] for t in rows} == {ready, parked}
+    v = repo.j("validate", "--no-git")["data"]
+    assert {"error_count", "warning_count", "warnings_only", "info_count"} <= set(v)
+
+
+def test_every_cli_code_is_documented_in_the_readme(ledger_mod):
+    import re as _re
+    from pathlib import Path as _P
+    src = _P(ledger_mod.__file__).read_text(encoding="utf-8")
+    codes = set(_re.findall(r'LedgerError\(\s*"([a-z-]+)"', src)) | set(
+        _re.findall(r'\berr\(\s*"([a-z-]+)"', src))
+    readme = _P(ledger_mod.__file__).resolve().parents[1].joinpath(
+        "README.md").read_text(encoding="utf-8")
+    missing = sorted(c for c in codes - set(ledger_mod.VALIDATION_CODES)
+                     if f"`{c}`" not in readme)
+    assert missing == [], missing

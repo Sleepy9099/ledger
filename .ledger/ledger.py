@@ -94,7 +94,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.4.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 16
+PROTOCOL_VERSION = 17
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -154,8 +154,9 @@ All implementation work in this repo is tracked in `.ledger/tasks/` via
 `python .ledger/ledger.py` (called `ledger` below). Task files are plain
 Markdown; read them directly. Headers, `## Commits`, and `## Log` are
 written ONLY through the CLI; edit Spec / Next Steps / Open Questions prose
-directly with your file tools. Always pass `--json` and parse
-`{"ok", "data", "errors"}`; every error carries a `fix_hint`.
+directly with your file tools. Always pass `--json`: `ok` is the success
+signal, `errors` also carries warning/info rows, error rows carry a
+`fix_hint`.
 
 ## Session start — always
 
@@ -163,16 +164,16 @@ directly with your file tools. Always pass `--json` and parse
    (an export does not survive between tool calls) or pass `--session`;
    `next --json` reports the actor it resolved. A `why` row claimed by an
    earlier session of yours is abandoned work: `ledger claim <id> --force`.
-2. `ledger next --claim --json` — this is your task (a bounded digest:
-   open steps, HUMAN questions, dead ends, recent Log; `--full` for
-   everything). Read its file (Spec, Next Steps, Open Questions) BEFORE
-   writing code; that is your handoff. `held` lists tasks you already hold
-   from earlier — resume those before taking more. If `task` is null,
-   `why` explains it — report that instead of inventing work.
+2. `ledger next --claim --json` — this is your task (a bounded digest;
+   `--full` for everything). A human named a task? `ledger claim <id>`.
+   Resuming one you hold? `ledger brief <id> --json`. Read its file (Spec,
+   Next Steps, Open Questions) BEFORE writing code; that is your handoff.
+   If `task` is null, `reason` and `why` explain it — report that instead
+   of inventing work.
 3. `ledger questions --human --json` — surface anything listed in your
    first message.
-4. Before implementing, `ledger search <symbol> --json` surfaces dead ends
-   and landmines recorded on other tasks.
+4. Before implementing, `ledger search <symbol> --in spec,log -n 5 --json`
+   surfaces dead ends and landmines recorded on other tasks.
 
 ## While working
 
@@ -190,24 +191,24 @@ directly with your file tools. Always pass `--json` and parse
   cannot proceed     -> `ledger block <id> --on human|<task-id>|"external: ..."`
                         (keeps your claim; NEVER auto-clears — `unblock` it)
   human decides      -> `ledger question <id> add "..." --human`, options
-                        and your recommendation on indented lines under it
-                        (`questions --human` shows them); keep going elsewhere
+                        and your recommendation on indented lines under it;
+                        keep going elsewhere
   duplicate          -> `ledger drop <id> --duplicate-of T-x`; carry unique
                         evidence to T-x with `note` (no claim needed)
   landed             -> trailer `Ledger-Task: <id>` / `ledger done`
-  A note that asks a future session to act is not the action — file the
-  task or step. Do NOT silently expand your task; if the Spec's premise
-  proves wrong, correct the Spec, `note` it, and implement the corrected
-  intent — that is not scope expansion.
-- Check finished steps (`ledger step <id> check <n>`), add discovered ones
-  (`step <id> add "..."`); the file is your memory, not the conversation.
+  A note asking a future session to act is not the action — file the task
+  or step. Never silently expand your task; if the Spec's premise proves
+  wrong, correct the Spec, `note` it, implement the corrected intent —
+  that is not scope expansion.
+- `ledger step <id> check <n>` / `step <id> add "..."` — the file is your
+  memory, not the conversation.
 - In Spec / Next Steps / Open Questions use `###` headings (a `## ` line
   starts a new section; fences are safe); checkboxes are exactly
   `- [ ] text` / `- [x] text`.
-- EVERY commit that advances a task ends with a trailer line in its LAST
-  paragraph: `Ledger-Task: <id>` (one per related task). Forgot the
-  trailer? Unpushed: amend the message. Pushed: `ledger link <id> <sha>`
-  — an explicit link counts as coverage. `Ledger-Exempt: <reason>` is
+- EVERY commit that advances a task ends with `Ledger-Task: <id>` in the
+  SAME final paragraph as any Co-Authored-By line (a blank line before it
+  drops the trailer; one line per task). Forgot it? Unpushed: amend.
+  Pushed: `ledger link <id> <sha>` counts as coverage. `Ledger-Exempt: <reason>` is
   ONLY for commits with no product-work obligation (merge/revert
   mechanics, ledger bookkeeping, generated artifacts, docs, CI metadata);
   code or tests without a task need `ledger add` first, never an exemption.
@@ -222,11 +223,10 @@ directly with your file tools. Always pass `--json` and parse
   `--superseded-by <id>` name the survivor).
 - If an integrator owns commits and closing here, hand off instead of
   `done`: `ledger release <id> --blocked --on "external: ready for integration"
-  --note "what passed locally"`. The integrator queue is `ledger list
-  --status blocked --json`; the integrator closes with `ledger done <id>
-  --commit <sha>` (no --force) or sends it back with `ledger release <id>
-  --note "integration failed: ..."`; committing against a handed-off task
-  needs no claim — the handoff is the authorization.
+  --note "what passed locally"`. Queue: `ledger list --blocked-on
+  "external: ready" --json`; the integrator closes with `done <id>
+  --commit <sha>` or sends it back with `release <id> --note "failed:
+  ..."`; a handed-off task needs no claim.
 
 ## Session end — never skip, even out of context budget
 
@@ -235,7 +235,7 @@ directly with your file tools. Always pass `--json` and parse
    stopped and why"` (already blocked? `release <id> --blocked --on <same
    reason> --note "..."` — a plain release resets it to todo).
 2. `ledger validate --coverage --strict --json` — fix every violation
-   you caused (follow the fix_hints) BEFORE your final commit. On a worker
+   you caused (errors AND warnings) BEFORE your final commit. On a worker
    branch this checks that branch only; the integrator re-runs it (and the
    full suite) on the integrated tree.
 
@@ -253,9 +253,9 @@ directly with your file tools. Always pass `--json` and parse
 - Never edit headers, `## Commits`, or `## Log` by hand — a merge conflict
   is the one exception, followed by `ledger repair <id>`; never delete or
   rewrite existing Log lines (CI detects it).
-- Never mint task ids by hand; only `ledger add`. Never edit
-  `exempt_patterns` / `exempt_allowed_paths` to make a commit pass — ask
-  via a HUMAN question.
+- Never mint task ids by hand; never answer your own `HUMAN:` question
+  (wait, or drop the task); never edit `exempt_patterns` /
+  `exempt_allowed_paths` to make a commit pass — ask via a HUMAN question.
 - Never delete a task file (`drop` instead), never mark work done
   without evidence, never commit code that has no task, and
   never work on a task you haven't claimed (or been handed).
@@ -2096,6 +2096,9 @@ def cmd_list(args) -> int:
         if getattr(args, "resource", None) and \
                 args.resource not in task.resources:
             continue
+        if getattr(args, "blocked_on", None) and not (
+                task.header.get("blocked_on") or "").startswith(args.blocked_on):
+            continue
         if depends_on and depends_on not in task.depends_on:
             continue
         if args.claimed and not task.header.get("claimed_by"):
@@ -2549,7 +2552,7 @@ def cmd_step(args) -> int:
             raise LedgerError("no-such-step",
                               f"no step matches '{args.value}' on {task.id}",
                               task=task.id,
-                              fix_hint="ledger show <id> lists steps with indexes")
+                              fix_hint="ledger brief <id> lists open steps with indexes")
         idx, line = hit
         mark = "x" if args.action == "check" else " "
         m = CHECKBOX_RE.match(line)
@@ -2586,7 +2589,7 @@ def cmd_question(args) -> int:
                 "no-such-question",
                 f"no unanswered question matches '{args.value}' on {task.id}",
                 task=task.id,
-                fix_hint="ledger show <id> lists questions with indexes")
+                fix_hint="ledger brief <id> lists HUMAN questions with indexes; show for all")
         _answer_question(task, hit[0], args.answer, ctx.actor)
     save_task(task)
     emit(args, True, {"id": task.id, "open_questions": task.questions()},
@@ -2797,7 +2800,7 @@ def cmd_answers(args) -> int:
             errors.append(err("no-such-question",
                               f"{task.id}: no question matches row {i}",
                               task=task.id,
-                              fix_hint="ledger show <id> lists questions"))
+                              fix_hint="ledger brief <id> lists questions"))
             continue
         idx, line = hit
         m = CHECKBOX_RE.match(line)
@@ -4141,11 +4144,15 @@ def cmd_validate(args) -> int:
             if v["severity"] == "warning":
                 v["severity"] = "error"
     errors = [v for v in violations if v["severity"] == "error"]
-    warnings = [v for v in violations if v["severity"] != "error"]
+    warnings = [v for v in violations if v["severity"] == "warning"]
+    infos = [v for v in violations if v["severity"] == "info"]
     ok = not errors
     summary = (f"validate: {len(errors)} error(s), {len(warnings)} "
-               f"warning/info — {'OK' if ok else 'FAIL'}")
-    emit(args, ok, {"error_count": len(errors), "warning_count": len(warnings),
+               f"warning(s), {len(infos)} info — {'OK' if ok else 'FAIL'}")
+    emit(args, ok, {"error_count": len(errors),
+                    # warning_count kept as warnings + info for one version
+                    "warning_count": len(warnings) + len(infos),
+                    "warnings_only": len(warnings), "info_count": len(infos),
                     "checked_coverage": args.coverage and not args.no_git},
          errors=violations, human=[summary])
     return 0 if ok else 1
@@ -4829,6 +4836,13 @@ def cmd_doctor(args) -> int:
 
 class Parser(argparse.ArgumentParser):
     def error(self, message):  # exit 3 on usage errors per the exit-code table
+        if "--json" in sys.argv[1:]:
+            # an orchestrator parsing stdout must never see empty output
+            print(json.dumps({"ok": False, "data": {}, "errors": [err(
+                "usage", message,
+                fix_hint=f"{self.prog} --help lists the accepted arguments")]},
+                indent=2))
+            self.exit(3)
         self.print_usage(sys.stderr)
         self.exit(3, f"{self.prog}: usage error: {message}\n")
 
@@ -4875,6 +4889,9 @@ def build_parser() -> Parser:
     p.add_argument("--tag")
     p.add_argument("--resource", metavar="SLUG",
                    help="sugar for --tag resource:<slug> (ANDed with --tag)")
+    p.add_argument("--blocked-on", metavar="PREFIX",
+                   help="only blocked tasks whose blocked_on starts with "
+                        "PREFIX (the integrator queue: 'external: ready')")
     p.add_argument("--depends-on", metavar="ID",
                    help="only tasks whose depends_on names this task "
                         "(reverse lookup: which wave was T-x in?)")
