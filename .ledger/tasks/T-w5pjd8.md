@@ -1,12 +1,11 @@
 ---
 id: T-w5pjd8
 title: Step outcome suffix (MOOT/DELEGATED/REJECTED): implement only if observed
-status: in_progress
+status: blocked
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T03:28:12Z
+blocked_on: external: an observed misread of a checked-but-not-executed step (repo, task id, Log line noted here)
 tags: format
 ---
 
@@ -48,6 +47,8 @@ tests/test_format.py: each OUTCOME parses into outcome / outcome_note / base tex
 
 ## Commits
 
+- 6305ba0 2026-09-01 Pin the free-text step outcome suffix as strict-clean (Phase 0)
+
 ## Log
 
 - 2026-09-01T23:48:40Z [claude-2026-09-01-a] add: created: Step outcome suffix (MOOT/DELEGATED/REJECTED): implement only if observed
@@ -61,3 +62,5 @@ tests/test_format.py: each OUTCOME parses into outcome / outcome_note / base tex
 - 2026-09-02T03:28:12Z [claude-2026-09-01-b] claim: claimed
 - 2026-09-02T03:29:11Z [claude-2026-09-01-b] step: checked 'Human confirms B (or A/C); unblock'
 - 2026-09-02T03:29:11Z [claude-2026-09-01-b] step: checked 'Phase 0 (any time): regression test pinning that a `-- WORD: note` suffix stays strict-clean; one DESIGN §2 sentence'
+- 2026-09-02T03:29:12Z [claude-2026-09-01-b] link: 6305ba0 Pin the free-text step outcome suffix as strict-clean (Phase 0)
+- 2026-09-02T03:29:12Z [claude-2026-09-01-b] release: blocked on external: an observed misread of a checked-but-not-executed step (repo, task id, Log line noted here) — Phase 0 landed; the parsed-suffix design waits for evidence per decision (B)
