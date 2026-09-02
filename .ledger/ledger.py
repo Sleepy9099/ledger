@@ -814,11 +814,40 @@ def commit_files(repo: Path, sha: str, merge: bool) -> list[str] | None:
     return None if entries is None else [path for _status, path in entries]
 
 
+_FILE_STATUS_CACHE: dict[str, list[tuple[str, str]]] = {}
+
+
+def prime_file_statuses(repo: Path, range_spec: str) -> None:
+    """ONE `git log --cc --name-status` over the range fills the per-commit
+    file cache, replacing one diff-tree spawn per classified commit (root
+    commits list their whole tree; merges list combined-diff files only —
+    the same answers diff-tree gives). A failure leaves the cache empty
+    and the per-commit fallback intact, so nothing passes on a guess."""
+    rc, out = run_git(["-c", "core.quotePath=false", "log", "--cc",
+                       "--name-status", "--no-renames", "--format=%x01%H",
+                       range_spec], repo)
+    if rc != 0:
+        return
+    for record in out.split("\x01"):
+        if not record.strip():
+            continue
+        sha, _, rest = record.partition("\n")
+        entries = []
+        for line in rest.split("\n"):
+            parts = line.split("\t")
+            if len(parts) >= 2 and parts[0].strip():
+                entries.append((parts[0].strip()[:1] or "M", parts[-1]))
+        _FILE_STATUS_CACHE[sha.strip()] = entries
+
+
 def commit_file_statuses(repo: Path, sha: str,
                          merge: bool) -> list[tuple[str, str]] | None:
     """[(status, path)] with git's one-letter status (A added, M modified,
     D deleted, ...); merges give the combined-diff status per parent
     collapsed to its first letter."""
+    cached = _FILE_STATUS_CACHE.get(sha)
+    if cached is not None:
+        return cached
     if merge:
         args = ["diff-tree", "--cc", "--name-status", "-r", sha]
     else:
@@ -1056,6 +1085,7 @@ class Ctx:
     actor: str
     json_mode: bool
     actor_source: str = "unknown"
+    _repo: object = dataclasses.field(default=False, repr=False)
 
     @property
     def tasks_dir(self) -> Path:
@@ -1063,7 +1093,11 @@ class Ctx:
 
     @property
     def repo(self) -> Path | None:
-        return git_toplevel(self.ledger_dir.parent)
+        # memoized: this used to shell out on EVERY access, and report read
+        # it once per commit
+        if self._repo is False:
+            self._repo = git_toplevel(self.ledger_dir.parent)
+        return self._repo  # type: ignore[return-value]
 
     @property
     def prefix(self) -> str:
@@ -3194,6 +3228,9 @@ def cmd_scan(args) -> int:
     commits, error = walk_commits(repo, ctx.config.get("baseline"), args.since)
     if commits is None:
         raise LedgerError("coverage", error or "git walk failed")
+    if commits:
+        since = args.since or ctx.config.get("baseline")
+        prime_file_statuses(repo, f"{since}..HEAD" if since else "HEAD")
     exempt_res = compile_exempt_patterns(ctx.config)
     policy = exempt_policy_globs(ctx.config)
     since = ctx.config.get("exempt_policy_since") or None
@@ -4107,6 +4144,9 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
                                  "fetch full history instead"))
 
     commits, walk_error = walk_commits(repo, ctx.config.get("baseline"))
+    if commits and coverage:
+        baseline = ctx.config.get("baseline")
+        prime_file_statuses(repo, f"{baseline}..HEAD" if baseline else "HEAD")
     if commits is None:
         if coverage:
             violations.append(err("coverage",
@@ -4697,6 +4737,9 @@ def cmd_report(args) -> int:
     commits_block = None
     if use_git:
         commits, walk_error = walk_commits(repo, ctx.config.get("baseline"))
+        if commits:
+            baseline = ctx.config.get("baseline")
+            prime_file_statuses(repo, f"{baseline}..HEAD" if baseline else "HEAD")
         if commits is not None and not walk_error:
             known = {t.id for t in tasks}
             pop_ids = {t.id for t in population}

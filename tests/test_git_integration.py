@@ -828,3 +828,31 @@ def test_prune_never_strips_a_done_tasks_last_evidence(repo):
     assert d["pruned"] == [{"task": tid, "sha": old[:7]}]
     rc, payload = validate(repo, "--coverage", "--strict")
     assert rc == 0, payload["errors"]
+
+
+
+def test_validate_scan_report_spawn_no_per_commit_diff_tree(ledger_mod, repo,
+                                                            monkeypatch, capsys):
+    """One name-status pass replaces one diff-tree per classified commit;
+    Ctx.repo is memoized (T-jqulvk)."""
+    for i in range(6):
+        (repo.root / f"c{i}.md").write_text(str(i), encoding="utf-8")
+        repo.commit_all(f"Chore {i}", ("Ledger-Exempt: docs",))
+    repo.j("add", "Bookkeeping only")
+    repo.commit_all("Track a task")
+    monkeypatch.chdir(repo.root)
+    real = ledger_mod.run_git
+    for argv in (["validate", "--coverage"], ["scan"], ["report"]):
+        calls = []
+
+        def counting(args, cwd):
+            calls.append(" ".join(args[:6]))
+            return real(args, cwd)
+        monkeypatch.setattr(ledger_mod, "run_git", counting)
+        ledger_mod._FILE_STATUS_CACHE.clear()
+        args = ledger_mod.build_parser().parse_args(argv + ["--json", "--session", "t"])
+        args.fn(args)
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"], (argv, payload["errors"])
+        assert not any("diff-tree" in c for c in calls), (argv, calls)
+        assert sum("show-toplevel" in c for c in calls) <= 1, (argv, calls)
