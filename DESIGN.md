@@ -427,8 +427,10 @@ verb (`note` a fact, `search` then `add` an obligation,
 future session to act is not the action), trailer every commit; finish =
 `done --commit HEAD` (respect refusals) or hand off with `release --blocked
 --on "external: ready for integration"`; session end = `release --note` +
-`validate --coverage --strict` and fix what you caused; never hand-edit
-headers/Commits/Log, never mint ids, never delete task files. The
+`validate --coverage --strict` and fix what you caused — for EVERY held
+task (`list --mine`; `next` reports `held` so a multi-claim session resumes
+its own work before taking more); never hand-edit headers/Commits/Log,
+never mint ids, never delete task files. The
 always-loaded protocol block is size-pinned by a test so every later edit
 replaces wording rather than appends.
 

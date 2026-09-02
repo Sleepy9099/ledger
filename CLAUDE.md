@@ -15,8 +15,10 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 2. `ledger next --claim --json` — this is your task (a bounded digest:
    open steps, HUMAN questions, dead ends, recent Log; `--full` for
    everything). Read its file (Spec, Next Steps, Open Questions) BEFORE
-   writing code; that is your handoff from previous sessions. If `task`
-   is null, `why` explains it — report that instead of inventing work.
+   writing code; that is your handoff from previous sessions. `held`
+   lists tasks you already hold from earlier — resume those before taking
+   more. If `task` is null, `why` explains it — report that instead of
+   inventing work.
 3. `ledger questions --human --json` — surface anything listed to the
    human in your first message.
 4. Before implementing, `ledger search <symbol|component|error> --json`
@@ -77,8 +79,11 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 
 ## Session end — never skip, even out of context budget
 
-1. Unfinished task: make Next Steps reflect reality, then
-   `ledger release <id> --note "where I stopped and why"`.
+1. Every unfinished task you hold (`ledger list --mine --json`): make
+   Next Steps reflect reality, then `ledger release <id> --note "where I
+   stopped and why"`; a held task that is already blocked keeps its reason
+   with `release <id> --blocked --on <same reason> --note "..."` (a plain
+   release would reset it to todo).
 2. `ledger validate --coverage --strict --json` — fix every violation
    you caused (follow the fix_hints) BEFORE your final commit. On an
    unmerged worker branch this checks that branch only; the integrator

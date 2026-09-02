@@ -1,10 +1,12 @@
 ---
 id: T-eb6bas
 title: list --mine and next.held for multi-claim sessions
-status: todo
+status: in_progress
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T02:08:47Z
 tags: ownership, ergonomics
 ---
 
@@ -31,10 +33,10 @@ No files or fields; derived at read time; `next --claim` computes `held` under t
 
 ## Next Steps
 
-- [ ] list --mine (exclusive with --unclaimed; refuse on actor 'unknown'); add to the lock-free list
-- [ ] next: held on both emit paths (+ human 'also holding:' lines); fix the self-takeover Log line
-- [ ] PROTOCOL_TEXT session-end step (plural, release --blocked for held blocked tasks); re-run init; README; DESIGN §9
-- [ ] Tests with --session a/--session b
+- [x] list --mine (exclusive with --unclaimed; refuse on actor 'unknown'); add to the lock-free list
+- [x] next: held on both emit paths (+ human 'also holding:' lines); fix the self-takeover Log line
+- [x] PROTOCOL_TEXT session-end step (plural, release --blocked for held blocked tasks); re-run init; README; DESIGN §9
+- [x] Tests with --session a/--session b
 
 ## Open Questions
 
@@ -47,3 +49,8 @@ No files or fields; derived at read time; `next --claim` computes `held` under t
 - 2026-09-01T23:48:47Z [claude-2026-09-01-a] step: added 'next: held on both emit paths (+ human 'also holding:' lines); fix the self-takeover Log line'
 - 2026-09-01T23:48:47Z [claude-2026-09-01-a] step: added 'PROTOCOL_TEXT session-end step (plural, release --blocked for held blocked tasks); re-run init; README; DESIGN §9'
 - 2026-09-01T23:48:47Z [claude-2026-09-01-a] step: added 'Tests with --session a/--session b'
+- 2026-09-02T02:08:47Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T02:14:42Z [claude-2026-09-01-b] step: checked 'list --mine (exclusive with --unclaimed; refuse on actor 'unknown'); add to the lock-free list'
+- 2026-09-02T02:14:42Z [claude-2026-09-01-b] step: checked 'next: held on both emit paths (+ human 'also holding:' lines); fix the self-takeover Log line'
+- 2026-09-02T02:14:42Z [claude-2026-09-01-b] step: checked 'PROTOCOL_TEXT session-end step (plural, release --blocked for held blocked tasks); re-run init; README; DESIGN §9'
+- 2026-09-02T02:14:42Z [claude-2026-09-01-b] step: checked 'Tests with --session a/--session b'

@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.2.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 8
+PROTOCOL_VERSION = 9
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -145,8 +145,10 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 2. `ledger next --claim --json` — this is your task (a bounded digest:
    open steps, HUMAN questions, dead ends, recent Log; `--full` for
    everything). Read its file (Spec, Next Steps, Open Questions) BEFORE
-   writing code; that is your handoff from previous sessions. If `task`
-   is null, `why` explains it — report that instead of inventing work.
+   writing code; that is your handoff from previous sessions. `held`
+   lists tasks you already hold from earlier — resume those before taking
+   more. If `task` is null, `why` explains it — report that instead of
+   inventing work.
 3. `ledger questions --human --json` — surface anything listed to the
    human in your first message.
 4. Before implementing, `ledger search <symbol|component|error> --json`
@@ -207,8 +209,11 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 
 ## Session end — never skip, even out of context budget
 
-1. Unfinished task: make Next Steps reflect reality, then
-   `ledger release <id> --note "where I stopped and why"`.
+1. Every unfinished task you hold (`ledger list --mine --json`): make
+   Next Steps reflect reality, then `ledger release <id> --note "where I
+   stopped and why"`; a held task that is already blocked keeps its reason
+   with `release <id> --blocked --on <same reason> --note "..."` (a plain
+   release would reset it to todo).
 2. `ledger validate --coverage --strict --json` — fix every violation
    you caused (follow the fix_hints) BEFORE your final commit. On an
    unmerged worker branch this checks that branch only; the integrator
@@ -1583,12 +1588,23 @@ def cmd_add(args) -> int:
 
 def cmd_list(args) -> int:
     ctx = make_ctx(args)
+    mine = getattr(args, "mine", False)
+    if mine and args.unclaimed:
+        raise LedgerError("usage", "--mine and --unclaimed are mutually "
+                          "exclusive", exit_code=3)
+    if mine and ctx.actor == "unknown":
+        raise LedgerError("usage", "--mine needs a session identity",
+                          exit_code=3,
+                          fix_hint="set LEDGER_SESSION or pass --session")
     tasks, problems = load_all_tasks(ctx)
     depends_on = None
     if getattr(args, "depends_on", None):
         depends_on = load_task_or_die(ctx, args.depends_on).id
     rows = []
     for task in sorted(tasks, key=sort_key):
+        # no status gate on --mine: a coherence violation stays visible
+        if mine and task.header.get("claimed_by") != ctx.actor:
+            continue
         if args.status and task.status not in args.status:
             continue
         if args.priority and task.priority not in args.priority:
@@ -1676,21 +1692,46 @@ def cmd_next(args) -> int:
     for stem in sorted(unreadable - parsed_stems - bad):
         why.append({"id": stem, "ineligible_because":
                     "file is not readable as UTF-8 — repair it"})
+    stale_days = int(ctx.config.get("stale_claim_days", 7))
+
+    def held_by_me(exclude: str | None) -> list[dict]:
+        # advisory view keyed on the resolved actor: what this session
+        # already holds, so a multi-claim session can release everything
+        # at session end and resume its own work before taking more
+        return [{"id": t.id, "title": t.title, "status": t.status,
+                 "claimed_at": t.header.get("claimed_at"),
+                 "blocked_on": t.header.get("blocked_on"),
+                 "stale": claim_is_stale(t, stale_days)}
+                for t in sorted(pool, key=sort_key)
+                if t.id != exclude and t.header.get("claimed_by") == ctx.actor
+                and t.status in ("in_progress", "blocked")]
+
+    def held_lines(held: list[dict]) -> list[str]:
+        return [f"  also holding: {h['id']} [{h['status']}"
+                + (f", stale" if h["stale"] else "")
+                + f"] {h['title']}" for h in held]
+
     if not eligible:
+        held = held_by_me(None)
         emit(args, True, {"task": None, "claimed": False, "why": why,
                           "blocked_on_human": human_blocked,
-                          "stale_blocks": stale_blocks},
+                          "stale_blocks": stale_blocks, "held": held},
              errors=problems,
              human=["nothing eligible"] +
-                   [f"  {w['id']}: {w['ineligible_because']}" for w in why])
+                   [f"  {w['id']}: {w['ineligible_because']}" for w in why]
+                   + held_lines(held))
         return 0
     top, flag = eligible[0]
     claimed = False
     if args.claim:
-        takeover = top.header.get("claimed_by") if flag == "stale_claim" else None
+        holder = top.header.get("claimed_by")
+        # refreshing one's own stale claim is not a takeover
+        takeover = (holder if flag == "stale_claim" and holder != ctx.actor
+                    else None)
         apply_claim(top, ctx.actor, takeover)
         save_task(top)
         claimed = True
+    held = held_by_me(top.id)
     # the digest is the DEFAULT here: this is the one command every session
     # runs, and the protocol already requires reading the task file, so the
     # full Log would enter context twice. --full restores task_full; the
@@ -1705,7 +1746,7 @@ def cmd_next(args) -> int:
             "claimed": claimed,
             "stale_takeover": flag == "stale_claim",
             "why": why, "blocked_on_human": human_blocked,
-            "stale_blocks": stale_blocks}
+            "stale_blocks": stale_blocks, "held": held}
     if args.n > 1:
         data["tasks"] = [task_brief(t) for t, _ in eligible[:args.n]]
     verb = "claimed" if claimed else "next"
@@ -1715,7 +1756,8 @@ def cmd_next(args) -> int:
                + [f"  {top.path}"]
                + [f"  stale block: {s['id']} blocked_on {s['blocked_on']} "
                   f"({s['target_status']}) — ledger unblock {s['id']}"
-                  for s in stale_blocks])
+                  for s in stale_blocks]
+               + held_lines(held))
     return 0
 
 
@@ -3183,6 +3225,9 @@ def build_parser() -> Parser:
                         "(reverse lookup: which wave was T-x in?)")
     p.add_argument("--claimed", action="store_true")
     p.add_argument("--unclaimed", action="store_true")
+    p.add_argument("--mine", action="store_true",
+                   help="only tasks claimed by this session (in_progress or "
+                        "blocked) — the session-end release list")
     p.set_defaults(fn=cmd_list)
 
     brief_opts = argparse.ArgumentParser(add_help=False)

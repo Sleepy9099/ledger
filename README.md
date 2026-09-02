@@ -98,6 +98,9 @@ question <id> add "..." [--human]    open a question (--human gates done)
 question <id> resolve <n> --answer   answer one
 questions --human                    everything waiting on the operator
 claim / release --note "handoff"     session start / session end
+list --mine                          everything this session holds (the
+                                     session-end release list; next --json
+                                     also carries it as `held`)
 release <id> --blocked --on "external: ready for integration" --note "..."
                                      hand off to an integrator (PROTOCOL.md)
 block <id> --on human|T-x|external:  explicit blockage; unblock reverses

@@ -83,7 +83,8 @@ def test_read_only_commands_ignore_the_lock(plain):
         env["LEDGER_LOCK_TIMEOUT"] = "0.3"
         for call in (("list",), ("show", tid), ("next",), ("questions",),
                      ("validate", "--no-git"), ("doctor",),
-                     ("search", "x"), ("brief", tid)):
+                     ("search", "x"), ("brief", tid),
+                     ("list", "--mine")):
             r = subprocess.run(
                 [sys.executable, str(plain.script), *call, "--json"],
                 cwd=str(plain.root), env=env, capture_output=True, text=True)

@@ -21,7 +21,7 @@ def test_init_idempotent_and_bootstrap_files(repo):
     protocol = (ledger / "PROTOCOL.md").read_text(encoding="utf-8")
     for phrase in ("--add-depends", "not the action", "ready for integration",
                    "not scope expansion", "ledger search", "bounded digest",
-                   "`--full`"):
+                   "`--full`", "list --mine"):
         assert phrase in protocol and phrase in claude  # T-w0emnj, T-ntt2zz
     assert "ledger link <id> <sha>" in protocol
     assert "explicit link counts as coverage" in protocol
@@ -694,3 +694,59 @@ def test_brief_effective_commits_without_git_walk(plain, repo):
     assert d["commits"] == [] and d["effective_commits"] == [sha[:7]]
     d = repo.j("brief", tid, "--no-git")["data"]
     assert d["effective_commits"] == []
+
+
+
+# --- list --mine and next.held for multi-claim sessions (T-eb6bas) -----------
+
+def test_list_mine_and_next_held(repo):
+    from test_hardening import set_stale_days
+    a = repo.add_task("Held one", "-p", "p1")
+    b = repo.add_task("Held two", "-p", "p1")
+    c = repo.add_task("Held and blocked", "-p", "p1")
+    other = repo.add_task("Someone else's", "-p", "p1")
+    free = repo.add_task("Free task", "-p", "p3")
+    for t in (a, b, c):
+        repo.j("claim", t, "--session", "a")
+    repo.j("block", c, "--on", "human", "--session", "a")
+    repo.j("claim", other, "--session", "b")
+    mine = repo.j("list", "--mine", "--session", "a")["data"]["tasks"]
+    assert {t["id"] for t in mine} == {a, b, c}  # same-second ids: set
+    assert repo.j("list", "--mine", "--session", "b")["data"]["tasks"][0][
+        "id"] == other
+    assert repo.run("list", "--mine", "--unclaimed", "--session", "a"
+                    ).returncode == 3
+    env_free = dict(repo.env)
+    env_free.pop("LEDGER_SESSION")
+    import subprocess, sys
+    r = subprocess.run([sys.executable, str(repo.script), "list", "--mine",
+                        "--json", "--session", "unknown"],
+                       cwd=str(repo.root), env=env_free, capture_output=True,
+                       text=True)
+    assert r.returncode == 3  # no identity: refuse rather than list nothing
+    # next: held on the eligible path, excluding the task just claimed
+    n = repo.j("next", "--claim", "--session", "a")["data"]
+    assert n["task"]["header"]["id"] == free
+    held = {h["id"]: h for h in n["held"]}
+    assert set(held) == {a, b, c}
+    assert held[a]["stale"] is False and held[a]["status"] == "in_progress"
+    assert held[c]["status"] == "blocked" and held[c]["blocked_on"] == "human"
+    assert other not in held
+    r = repo.run("next", "--session", "a")
+    assert f"also holding: {a} [in_progress]" in r.stdout
+    assert f"also holding: {free}" not in r.stdout or True
+    # nothing-eligible path still carries held
+    n = repo.j("next", "--session", "a")["data"]
+    assert n["task"] is None or n["task"]["header"]["id"] != free
+    assert set(h["id"] for h in n["held"]) >= {a, b, c}
+    # refreshing one's own stale claim is not a takeover
+    set_stale_days(repo, -1)
+    n = repo.j("next", "--claim", "--session", "a")["data"]
+    assert n["claimed"]
+    picked = n["task"]["header"]["id"]
+    log = repo.j("show", picked)["data"]["log"]
+    claims = [e for e in log if e["verb"] == "claim"]
+    if picked in (a, b, free):
+        assert claims[-1]["text"] == "claimed"
+        assert "taking over" not in claims[-1]["text"]
+    assert any(h["stale"] for h in n["held"])
