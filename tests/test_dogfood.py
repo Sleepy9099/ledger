@@ -56,3 +56,13 @@ def test_protocol_text_stays_within_its_budget(ledger_mod):
     text = ledger_mod.PROTOCOL_TEXT
     assert text.count("\n") <= 110, text.count("\n")
     assert len(text.encode("utf-8")) <= 6000, len(text.encode("utf-8"))
+
+
+
+def test_report_runs_on_this_repo():
+    r = subprocess.run(
+        [sys.executable, str(ROOT / ".ledger" / "ledger.py"), "report",
+         "--json"], cwd=str(ROOT), capture_output=True, text=True)
+    payload = json.loads(r.stdout)
+    assert r.returncode == 0 and payload["ok"], payload
+    assert payload["data"]["commits"]["linked"] >= 1

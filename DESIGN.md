@@ -223,6 +223,14 @@ Commands: `init`, `add`, `list`, `show`, `next [--claim]`, `claim [--force]`,
 `question add|resolve`, `questions [--human]`, `block --on` / `unblock`,
 `link`, `scan [--write]`, `done [--commit|--no-code|--force]`, `drop --why`,
 `validate [--coverage] [--strict] [--no-git]`, `doctor`, `search`,
+`report [--since|--until|--tag|--task|--actor|--no-git]` (operator
+diagnostics: every figure derived on each call from headers, Log lines and
+the trailer walk, nothing stored — §11's "rots" objection answered; the
+"invites gaming" objection is accepted with eyes open: per-actor counters
+are agent-optimizable, so the command is kept out of PROTOCOL_TEXT and
+never feeds `next`, `done` or `validate`; `sources` labels lower bounds and
+the families the ledger never records — validation duration, integration
+failures, resource waits, regressions — which live in wave `note` prose),
 `questions [--human] [--task]` (the operator decision view: rows carry
 task state, the indented context lines under each question — options and
 a recommendation the agent wrote, never CLI-authored — and a grouping key;
@@ -522,8 +530,10 @@ Archive directories (rename/edit conflicts), global NDJSON event logs
 (every-merge conflict magnet), index/counter files, lock files as state (the
 §7(g) mutex holds none) and daemons, git hooks
 (don't survive clone; CI validate is the layer), `merge=union` drivers,
-epics/sprints/due-dates/velocity (PM features that rot and invite gaming;
-a wave is an ordinary task whose depends_on lists its members — §8),
+epics/sprints/due-dates/velocity as STORED features (they rot and invite
+gaming; a wave is an ordinary task whose depends_on lists its members — §8;
+`report` derives wave metrics on demand and stores nothing — a conscious,
+partial reversal decided 2026-09-01 for orchestrator visibility),
 evidence-token vocabularies (commits carry their tests), an `updated` field,
 inferred commit linkage (fabricated evidence), YAML/TOML parsing (dependency
 or 3.11+ / write-less; the strict subset is ~50 lines and merges better), and

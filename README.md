@@ -132,6 +132,27 @@ error carries a machine-actionable `fix_hint`. Exit codes: 0 ok,
 Agent identity comes from `--session`, else the `LEDGER_SESSION` env var,
 else `git config user.name` — set the env once per session.
 
+## Operator diagnostics
+
+`ledger report [--since TS|REF] [--until TS] [--tag TAG] [--task ID]
+[--actor NAME] [--no-git] --json` is the orchestrator's view of a wave or
+a backlog window: tasks opened / done / dropped by priority (priority at
+creation replayed from `set:` lines), duplicates dropped (machine relation
+vs. a labeled prose heuristic), reproduction and duplicate ratios, blockers
+new / cleared, HUMAN questions created / answered / still open, dependency
+edges added / removed, priorities raised / lowered, workers and per-actor
+counters (claims, takeovers, releases, done, notes, dead ends), active and
+stranded claims at the end of the window, claim-to-close durations
+(median / p90 / max), and — from git history only — linked / exempt /
+unlinked / dangling commits in the window plus, for `--task`, the wave's
+final integration commit. `--task <wave>` = the task and its members
+(including members removed later); `--tag wave:<slug>` = members plus work
+discovered mid-wave. Everything is recomputed on each call and nothing is
+stored, so it cannot rot; Log-derived figures carry the honest-agent trust
+level and `sources` says which are lower bounds. It is deliberately absent
+from the agent protocol and from "Daily commands": it never feeds `next`,
+`done` or `validate`.
+
 ## Resource leases (advisory)
 
 Tag a task `resource:<slug>` (`add ... --tag resource:gpu`, or

@@ -319,7 +319,7 @@ def test_every_command_emits_envelope(repo):
         ("block", tid, "--on", "human"), ("unblock", tid),
         ("set", tid, "--priority", "p1"), ("scan",), ("validate",),
         ("doctor",), ("search", "x"), ("brief", tid),
-        ("answers", "apply", "-"),
+        ("answers", "apply", "-"), ("report",),
     ]
     for call in calls:
         r = repo.run(*call, "--json", input="[]")
@@ -831,3 +831,105 @@ def test_claim_and_unblock_refuse_held_resources_unless_forced(repo):
     ok = repo.j("unblock", a, "--session", "x", "--force")
     assert ok["ok"] and ok["data"]["status"] == "in_progress"
     assert "also held by" in repo.j("show", a)["data"]["log"][-1]["text"]
+
+
+
+# --- report: derived operator diagnostics (T-00mrm7) -------------------------
+
+def test_report_counts_every_family(repo):
+    m1 = repo.add_task("Member one", "-p", "p1", "--tag", "wave:w1")
+    m2 = repo.add_task("Member two", "-p", "p3", "--tag", "wave:w1")
+    m3 = repo.add_task("Member three", "--tag", "wave:w1")
+    dup = repo.add_task("Member one again", "--tag", "wave:w1")
+    w = repo.j("add", "Wave 1", "-p", "p1", "-s", "s", "--tag", "wave",
+               "--after", m1, "--after", m2, "--after", m3)["data"]["id"]
+    repo.j("set", m2, "--priority", "p0")          # raised: opened at p3
+    repo.j("set", w, "--remove-depends", m3)        # removed member
+    repo.j("claim", w, "--session", "orchestrator")
+    repo.j("claim", m1, "--session", "worker-a")
+    (repo.root / "m1.py").write_text("x\n", encoding="utf-8")
+    sha = repo.commit_all("Member one work", (f"Ledger-Task: {m1}",))
+    repo.j("done", m1, "--commit", "HEAD", "--session", "worker-a")
+    repo.j("drop", dup, "--duplicate-of", m1, "--session", "worker-a")
+    repo.j("drop", m3, "--why", "duplicate of something", "--session",
+           "worker-b")
+    repo.j("claim", m2, "--session", "worker-b")  # block keeps this claim
+    repo.j("block", m2, "--on", "human", "--why", "budget?", "--session",
+           "worker-b")
+    repo.j("question", m2, "add", "buy the GPU?", "--human",
+           "--session", "worker-b")
+    repo.j("question", w, "add", "ship on friday?", "--human",
+           "--session", "orchestrator")
+    repo.j("question", w, "resolve", "friday", "--answer", "yes",
+           "--session", "the-operator")
+    repo.j("note", m1, "the cache route deadlocks", "--dead-end",
+           "--session", "worker-a")
+    d = repo.j("report", "--task", w)
+    assert d["ok"]
+    r = d["data"]
+    assert r["population"]["tasks"] == 4  # wave + m1 + m2 + removed m3
+    assert r["population"]["scope"] == {"task": w, "members_missing": []}
+    assert r["work"]["opened"]["p1"] == 2 and r["work"]["opened"]["p3"] == 1
+    assert r["work"]["closed_done"]["p1"] == 1
+    assert r["work"]["closed_dropped"]["p2"] == 1
+    assert r["dropped_duplicates"] == {"relation": 0, "prose_heuristic": 1}
+    assert r["ratios"]["reproduction"] == 4.0
+    assert r["blockers"] == {"new": 1, "cleared": 0}
+    assert r["questions"] == {"human_created": 2, "answered": 1,
+                              "human_open_end": 1}
+    assert r["dependencies"] == {"added": 3, "removed": 1}
+    assert r["priority"] == {"raised": 1, "lowered": 0}
+    assert r["agents"]["workers"] == ["orchestrator", "worker-a", "worker-b"]
+    assert r["agents"]["by_actor"]["worker-a"]["done"] == 1
+    assert r["agents"]["by_actor"]["worker-a"]["dead_ends"] == 1
+    assert [a["id"] for a in r["agents"]["active_claims"]] == [w, m2]
+    assert r["agents"]["stranded_claims"] == []
+    assert r["durations"]["created_to_closed"]["n"] == 2
+    assert r["durations"]["first_claim_to_closed"]["n"] == 1
+    assert r["commits"]["linked"] == 1 and r["commits"]["in_window"] >= 2
+    assert r["commits"]["linked_commits_per_done_task"] == 1.0
+    assert "commits" in r["sources"]["git_derived"]
+    # the whole population by tag includes the duplicate that is not a member
+    d = repo.j("report", "--tag", "wave:w1")["data"]
+    assert d["population"]["tasks"] == 4
+    assert d["dropped_duplicates"]["relation"] == 1
+    # the orchestrator closes the wave: members' claims become stranded
+    repo.j("done", w, "--commit", "HEAD", "--session", "orchestrator",
+           "--force")
+    d = repo.j("report", "--task", w)["data"]
+    assert [s["id"] for s in d["agents"]["stranded_claims"]] == [m2]
+    assert d["commits"]["final_commit"] == sha[:7]
+    r = repo.run("report", "--task", w)
+    assert "workers 3" in r.stdout and "final " + sha[:7] in r.stdout
+
+
+def test_report_windows_actor_and_git_free_paths(repo, plain):
+    old = repo.add_task("Opened before the window", "-p", "p1")
+    repo.j("claim", old, "--session", "a")
+    import time
+    time.sleep(1.1)
+    boundary = repo.commit_all("Boundary commit", ("Ledger-Exempt: fixture",))
+    time.sleep(1.1)
+    repo.j("done", old, "--no-code", "closed later", "--session", "a")
+    new = repo.add_task("Opened after")
+    d = repo.j("report", "--since", "HEAD")["data"]  # a git ref resolves
+    assert sum(d["work"]["opened"].values()) == 1  # only `new`
+    assert d["work"]["closed_done"]["p1"] == 1     # the later close counts
+    assert d["window"]["since"] is not None
+    d = repo.j("report", "--since", "2000-01-01", "--until",
+               "2000-01-02T00:00:00Z")["data"]
+    assert sum(d["work"]["opened"].values()) == 0
+    assert d["agents"]["by_actor"] == {}
+    d = repo.j("report", "--actor", "a")["data"]
+    assert set(d["agents"]["by_actor"]) == {"a"}
+    assert repo.j("report", "--since", "not-a-ref", expect=3)["errors"][0][
+        "code"] == "usage"
+    assert repo.j("report", "--no-git")["data"]["commits"] is None
+    p = plain.add_task("Plain tree")
+    d = plain.j("report")
+    assert d["ok"] and d["data"]["commits"] is None
+    assert d["data"]["sources"]["git_derived"] == []
+    # nothing is written
+    before = repo.read(new)
+    repo.j("report")
+    assert repo.read(new) == before

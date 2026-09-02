@@ -663,6 +663,18 @@ class Commit:
     parents: list[str]
     task_ids: list[str]
     exempt_reason: str | None
+    ctime: str = ""  # committer time, UTC ISO Z (report windows)
+
+
+def iso_to_utc_z(value: str) -> str | None:
+    """`%cI` / any offset-aware ISO-8601 -> the ledger's UTC Z stamp."""
+    try:
+        dt = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).strftime(TS_FMT)
 
 
 def _parse_trailers(body: str) -> tuple[list[str], str | None]:
@@ -700,7 +712,7 @@ def walk_commits(repo: Path, baseline: str | None,
         range_spec = "HEAD"
     # NUL separators: git forbids NUL in messages, so parsing cannot be
     # confused by message content (unlike \x1e/\x1f, which CAN appear).
-    fmt = "%H%x00%h%x00%as%x00%s%x00%P%x00%B%x00%x1e"
+    fmt = "%H%x00%h%x00%as%x00%s%x00%P%x00%cI%x00%B%x00%x1e"
     rc, out = run_git(["log", "--no-show-signature", f"--format={fmt}",
                        range_spec], repo)
     if rc != 0:
@@ -710,15 +722,16 @@ def walk_commits(repo: Path, baseline: str | None,
         record = record.strip("\n")
         if not record.strip():
             continue
-        parts = record.split("\x00", 5)
-        if len(parts) != 6:
+        parts = record.split("\x00", 6)
+        if len(parts) != 7:
             continue
-        sha, sha7, date, subject, parents, body = parts
+        sha, sha7, date, subject, parents, ctime, body = parts
         task_ids, exempt = _parse_trailers(body)
         commits.append(Commit(sha=sha.strip(), sha7=sha7, date=date,
                               subject=subject, body=body,
                               parents=parents.split(), task_ids=task_ids,
-                              exempt_reason=exempt))
+                              exempt_reason=exempt,
+                              ctime=iso_to_utc_z(ctime) or ""))
     return commits, None
 
 
@@ -1344,12 +1357,20 @@ def sort_key(task: Task):
     return (prio, task.header.get("created", ""), task.id)
 
 
-def claim_is_stale(task: Task, stale_days: int) -> bool:
+def claim_is_stale_at(task: Task, stale_days: int, ref_ts: str | None) -> bool:
+    """Staleness relative to ref_ts (a UTC Z stamp) instead of now — the
+    report asks "was this claim stranded at the end of the window?"."""
     last = task.last_activity()
     dt = parse_ts(last)
     if dt is None:
         return True
-    return datetime.now(timezone.utc) - dt > timedelta(days=stale_days)
+    ref = parse_ts(ref_ts) if ref_ts else None
+    now = ref or datetime.now(timezone.utc)
+    return now - dt > timedelta(days=stale_days)
+
+
+def claim_is_stale(task: Task, stale_days: int) -> bool:
+    return claim_is_stale_at(task, stale_days, None)
 
 
 # ---------------------------------------------------------------------------
@@ -3509,6 +3530,343 @@ def cmd_search(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# report: derived, never-stored wave / backlog metrics (operator diagnostics)
+#
+# Every figure is recomputed from headers, Log lines and the trailer walk on
+# each call — nothing is stored, so nothing rots (DESIGN §11's first
+# objection). Log-derived figures inherit §3's honest-agent trust level and
+# are labeled in `sources`; only the `commits` block comes from git history.
+# Never feeds next / done / validate; kept out of PROTOCOL_TEXT so the
+# metric stays off the agent's lazy path (core bet 1).
+# ---------------------------------------------------------------------------
+
+SET_LINE_RE = re.compile(r"^(\w+) (.+?) -> (.+)$")  # cmd_set's `{field} {old} -> {new}`
+
+
+def _window_bound(ctx: Ctx, value: str | None, use_git: bool) -> str | None:
+    """A UTC Z stamp from `YYYY-MM-DD`, a Z timestamp, or (with git) a ref
+    resolved to its committer time."""
+    if not value:
+        return None
+    if TS_RE.match(value):
+        return value
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        return value + "T00:00:00Z"
+    if use_git and ctx.repo is not None:
+        rc, out = run_git(["show", "-s", "--format=%cI", value + "^{commit}"],
+                          ctx.repo)
+        if rc == 0 and out:
+            stamp = iso_to_utc_z(out.splitlines()[0])
+            if stamp:
+                return stamp
+    raise LedgerError("usage", f"cannot interpret '{value}' as a timestamp "
+                      "or git ref", exit_code=3,
+                      fix_hint="use YYYY-MM-DD, YYYY-MM-DDTHH:MM:SSZ, or a "
+                               "git ref (needs a repo and no --no-git)")
+
+
+def _hours(a: str, b: str) -> float | None:
+    da, db = parse_ts(a), parse_ts(b)
+    if da is None or db is None:
+        return None
+    return round((db - da).total_seconds() / 3600, 1)
+
+
+def _stats(values: list[float]) -> dict:
+    import statistics
+    vals = sorted(v for v in values if v is not None)
+    if not vals:
+        return {"n": 0, "median": None, "p90": None, "max": None}
+    return {"n": len(vals), "median": round(statistics.median(vals), 1),
+            "p90": vals[int(0.9 * (len(vals) - 1))], "max": vals[-1]}
+
+
+def _priority_at_creation(task: Task) -> str:
+    """Replay the oldest `set: priority X -> Y` line: X was the value before
+    the first change, i.e. the priority at creation."""
+    sets = sorted((e for e in task.log() if e["verb"] == "set"),
+                  key=lambda e: e["ts"])
+    for e in sets:
+        m = SET_LINE_RE.match(e["text"])
+        if m and m.group(1) == "priority":
+            return m.group(2)
+    return task.priority
+
+
+def cmd_report(args) -> int:
+    ctx = make_ctx(args)  # read-only, lock-free
+    use_git = not args.no_git and ctx.repo is not None
+    since = _window_bound(ctx, args.since, use_git)
+    until = _window_bound(ctx, args.until, use_git)
+    tasks, problems = load_all_tasks(ctx)
+    by_id = {t.id: t for t in tasks}
+
+    def in_window(ts: str | None) -> bool:
+        return bool(ts) and (since is None or ts >= since) and \
+            (until is None or ts <= until)
+
+    # ---- population ---------------------------------------------------
+    population = list(tasks)
+    scope: dict = {}
+    if args.tag:
+        population = [t for t in tasks if args.tag in t.tags]
+        scope["tag"] = args.tag
+    parent = None
+    if args.task:
+        parent = _resolve_fragment(tasks, args.task)
+        members = list(parent.depends_on)
+        for e in parent.log():  # members removed later are still members
+            m = SET_LINE_RE.match(e["text"]) if e["verb"] == "set" else None
+            if m and m.group(1) == "depends_on" and m.group(2) == "-":
+                members.append(m.group(3).strip())
+        wanted = [parent.id] + list(dict.fromkeys(members))
+        population = [by_id[i] for i in wanted if i in by_id]
+        scope["task"] = parent.id
+        scope["members_missing"] = [i for i in wanted if i not in by_id]
+    if args.actor:
+        scope["actor"] = args.actor
+
+    def events(task: Task) -> list[dict]:
+        return [e for e in task.log() if in_window(e["ts"])
+                and (not args.actor or e["actor"] == args.actor)]
+
+    # ---- work -----------------------------------------------------------
+    def by_prio() -> dict:
+        return {p: 0 for p in PRIORITIES}
+    work = {"opened": by_prio(), "closed_done": by_prio(),
+            "closed_dropped": by_prio()}
+    dropped_dups, prose_dups = 0, 0
+    for t in population:
+        if in_window(t.header.get("created")):
+            work["opened"][_priority_at_creation(t)] = \
+                work["opened"].get(_priority_at_creation(t), 0) + 1
+        if t.status in ("done", "dropped") and in_window(t.header.get("closed")):
+            key = "closed_done" if t.status == "done" else "closed_dropped"
+            work[key][t.priority] = work[key].get(t.priority, 0) + 1
+            if t.status == "dropped":
+                rel = t.closed_relation()
+                if rel and rel["kind"] == "duplicate":
+                    dropped_dups += 1
+                elif rel is None and any(
+                        e["verb"] == "drop" and "duplicate" in e["text"].lower()
+                        for e in t.log()):
+                    prose_dups += 1
+    opened = sum(work["opened"].values())
+    closed_done = sum(work["closed_done"].values())
+    ratios = {"reproduction": round(opened / closed_done, 2) if closed_done else None,
+              "duplicate_rate": round(dropped_dups / opened, 2) if opened else None}
+
+    # ---- Log-derived counters --------------------------------------------
+    blockers = {"new": 0, "cleared": 0}
+    questions = {"human_created": 0, "answered": 0, "human_open_end": 0}
+    dependencies = {"added": 0, "removed": 0}
+    priority = {"raised": 0, "lowered": 0}
+    by_actor: dict[str, dict] = {}
+    workers: set[str] = set()
+    for t in population:
+        if t.status in OPEN_STATUSES:
+            questions["human_open_end"] += sum(
+                1 for q in t.questions() if q["human"] and not q["answered"])
+        for e in events(t):
+            verb, text, actor = e["verb"], e["text"], e["actor"]
+            row = by_actor.setdefault(actor, {
+                "claims": 0, "takeovers": 0, "releases": 0, "done": 0,
+                "notes": 0, "dead_ends": 0})
+            if verb == "claim":
+                workers.add(actor)
+                row["claims"] += 1
+                if text.startswith("taking over"):
+                    row["takeovers"] += 1
+            elif verb == "release":
+                row["releases"] += 1
+                if text.startswith("blocked on "):
+                    blockers["new"] += 1
+            elif verb in ("done", "done(no-code)"):
+                row["done"] += 1
+            elif verb == "note":
+                row["notes"] += 1
+            elif verb == "note(dead-end)":
+                row["notes"] += 1
+                row["dead_ends"] += 1
+            elif verb == "block":
+                blockers["new"] += 1
+            elif verb == "unblock":
+                blockers["cleared"] += 1
+            elif verb == "question" and text.startswith("added (HUMAN)"):
+                questions["human_created"] += 1
+            elif verb == "answer":
+                questions["answered"] += 1
+            elif verb == "add" and "(after: " in text:
+                dependencies["added"] += len(
+                    id_token_pattern(ctx.prefix).findall(
+                        text.split("(after: ", 1)[1].split(")", 1)[0]))
+            elif verb == "set":
+                m = SET_LINE_RE.match(text)
+                if not m:
+                    continue
+                field, old, new = m.group(1), m.group(2), m.group(3)
+                if field == "depends_on":
+                    dependencies["added" if old == "+" else "removed"] += 1
+                elif field == "priority" and old in PRIORITIES and new in PRIORITIES:
+                    if PRIORITIES.index(new) < PRIORITIES.index(old):
+                        priority["raised"] += 1
+                    elif PRIORITIES.index(new) > PRIORITIES.index(old):
+                        priority["lowered"] += 1
+
+    # ---- claims at the end of the window ---------------------------------
+    stale_days = int(ctx.config.get("stale_claim_days", 7))
+    active, stranded = [], []
+    for t in population:
+        if not t.header.get("claimed_by"):
+            continue
+        row = {"id": t.id, "status": t.status,
+               "claimed_by": t.header.get("claimed_by"),
+               "claimed_at": t.header.get("claimed_at")}
+        if claim_is_stale_at(t, stale_days, until) or (
+                parent is not None and parent.status in ("done", "dropped")
+                and t.id != parent.id):
+            stranded.append(row)
+        else:
+            active.append(row)
+
+    # ---- durations -----------------------------------------------------
+    c2c, fc2c, c2fc = [], [], []
+    for t in population:
+        created, closed = t.header.get("created"), t.header.get("closed")
+        claims = sorted(e["ts"] for e in t.log() if e["verb"] == "claim")
+        first_claim = claims[0] if claims else None
+        if closed and in_window(closed):
+            c2c.append(_hours(created, closed))
+            if first_claim:
+                fc2c.append(_hours(first_claim, closed))
+        if first_claim and in_window(first_claim):
+            c2fc.append(_hours(created, first_claim))
+    durations = {"unit": "hours",
+                 "created_to_closed": _stats(c2c),
+                 "first_claim_to_closed": _stats(fc2c),
+                 "created_to_first_claim": _stats(c2fc)}
+
+    # ---- commits (git history only; null when it cannot be computed) -----
+    commits_block = None
+    if use_git:
+        commits, walk_error = walk_commits(ctx.repo, ctx.config.get("baseline"))
+        if commits is not None and not walk_error:
+            known = {t.id for t in tasks}
+            pop_ids = {t.id for t in population}
+            exempt_res = compile_exempt_patterns(ctx.config)
+            explicit = explicit_links(tasks)
+            in_scope = [c for c in commits if in_window(c.ctime)]
+            counts = {"linked": 0, "exempt": 0, "unlinked": 0, "dangling": 0}
+            linked_tasks_total, linked_n = 0, 0
+            per_task: dict[str, int] = {}
+            for c in in_scope:
+                bucket, dangling = classify_commit(c, ctx.repo, known,
+                                                   exempt_res, explicit)
+                counts[bucket] += 1
+                counts["dangling"] += len(dangling)
+                if bucket == "linked":
+                    ids = {t for t in c.task_ids if t in known}
+                    ids |= set(explicit_link_tasks(c, explicit))
+                    linked_n += 1
+                    linked_tasks_total += len(ids)
+                    for tid in ids:
+                        if tid in pop_ids:
+                            per_task[tid] = per_task.get(tid, 0) + 1
+            done_in_pop = [t for t in population if t.status == "done"]
+            final_commit = None
+            if parent is not None:
+                cands = list(dict.fromkeys(
+                    [c["sha"] for c in parent.commits()]
+                    + [c.sha7 for c in commits if parent.id in c.task_ids
+                       or parent.id in explicit_link_tasks(c, explicit)]))
+                cands = [s for s in cands if git_sha_exists(ctx.repo, s)]
+                tips = []
+                for s in cands:
+                    ancestor_of_other = any(
+                        o != s and run_git(["merge-base", "--is-ancestor",
+                                            s, o], ctx.repo)[0] == 0
+                        for o in cands)
+                    if not ancestor_of_other:
+                        tips.append(s)
+                final_commit = tips[0] if tips else None
+            commits_block = {
+                **counts, "in_window": len(in_scope),
+                "tasks_per_linked_commit":
+                    round(linked_tasks_total / linked_n, 2) if linked_n else None,
+                "linked_commits_per_done_task":
+                    round(sum(per_task.get(t.id, 0) for t in done_in_pop)
+                          / len(done_in_pop), 2) if done_in_pop else None,
+                "final_commit": final_commit,
+            }
+
+    data = {
+        "window": {"since": since, "until": until},
+        "population": {"tasks": len(population), "scope": scope},
+        "work": work,
+        "dropped_duplicates": {"relation": dropped_dups,
+                               "prose_heuristic": prose_dups},
+        "ratios": ratios,
+        "blockers": blockers,
+        "questions": questions,
+        "dependencies": dependencies,
+        "priority": priority,
+        "agents": {"workers": sorted(workers), "by_actor": by_actor,
+                   "active_claims": active, "stranded_claims": stranded},
+        "durations": durations,
+        "commits": commits_block,
+        "sources": {
+            "log_derived": ["work", "dropped_duplicates", "blockers",
+                            "questions", "dependencies", "priority",
+                            "agents", "durations"],
+            "git_derived": ["commits"] if commits_block is not None else [],
+            "lower_bounds": [
+                "dependencies.added counts add-line (after: ...) ids only "
+                "for tasks filed by a copy >= 1.2.0",
+                "work.opened priorities are replayed from set: lines",
+                "dropped_duplicates.prose_heuristic is a text match"],
+            "out_of_scope": ["validation duration", "integration failures",
+                             "resource waits", "regressions/hotfixes — "
+                             "orchestrator facts that live in wave notes"],
+        },
+    }
+    p = ", ".join(f"{k}:{v}" for k, v in work["opened"].items() if v)
+    human = [
+        f"report  window {since or '-'} .. {until or '-'}  "
+        f"population {len(population)} task(s) {scope or ''}",
+        f"  opened {opened} ({p or '0'})  done {closed_done}  dropped "
+        f"{sum(work['closed_dropped'].values())}  dup {dropped_dups}"
+        f"(+{prose_dups} prose)  reproduction {ratios['reproduction']}",
+        f"  blockers new {blockers['new']} cleared {blockers['cleared']}  "
+        f"human q created {questions['human_created']} answered "
+        f"{questions['answered']} open {questions['human_open_end']}",
+        f"  deps +{dependencies['added']} -{dependencies['removed']}  "
+        f"priority up {priority['raised']} down {priority['lowered']}",
+        f"  workers {len(workers)}  active claims {len(active)}  stranded "
+        f"{len(stranded)}" + (": " + ", ".join(
+            f"{s['id']} ({s['claimed_by']})" for s in stranded)
+            if stranded else ""),
+    ]
+    for actor, row in sorted(by_actor.items()):
+        human.append(f"    {actor}: " + ", ".join(
+            f"{k} {v}" for k, v in row.items() if v))
+    d = durations
+    human.append(
+        f"  hours created->closed median {d['created_to_closed']['median']} "
+        f"p90 {d['created_to_closed']['p90']} (n={d['created_to_closed']['n']})"
+        f"; claim->closed median {d['first_claim_to_closed']['median']}")
+    if commits_block is None:
+        human.append("  commits: n/a (no git walk)")
+    else:
+        c = commits_block
+        human.append(
+            f"  commits {c['in_window']}: linked {c['linked']} exempt "
+            f"{c['exempt']} unlinked {c['unlinked']} dangling {c['dangling']}"
+            + (f"  final {c['final_commit']}" if c["final_commit"] else ""))
+    emit(args, True, data, errors=problems, human=human)
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # doctor: offline version / compatibility report
 # ---------------------------------------------------------------------------
 
@@ -3861,6 +4219,23 @@ def build_parser() -> Parser:
                    help="open statuses only (default: every status)")
     p.add_argument("-n", type=int, default=20, help="max rows (default 20)")
     p.set_defaults(fn=cmd_search)
+
+    p = sub.add_parser("report", parents=[common],
+                       help="operator diagnostics: derived wave / backlog "
+                            "metrics (never stored, never fed to next/done/"
+                            "validate)")
+    p.add_argument("--since", metavar="TS|REF",
+                   help="YYYY-MM-DD, UTC Z timestamp, or git ref (committer "
+                        "time)")
+    p.add_argument("--until", metavar="TS|REF")
+    p.add_argument("--tag", help="population = tasks carrying TAG")
+    p.add_argument("--task", metavar="ID",
+                   help="population = the task and its depends_on members "
+                        "(including members removed later)")
+    p.add_argument("--actor", help="count only this actor's Log events")
+    p.add_argument("--no-git", action="store_true",
+                   help="skip the commit walk (commits: null)")
+    p.set_defaults(fn=cmd_report)
 
     p = sub.add_parser("doctor", parents=[common],
                        help="offline version/compatibility report (exit 1 "
