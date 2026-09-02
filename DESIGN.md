@@ -619,3 +619,15 @@ deterministic token-overlap hint; a model's opinion must never gate CI).
     never feeds `validate`, `done` or coverage — results are retrieval
     hints. Pre-search vendored copies fail with argparse exit 3 and no
     envelope: treat a JSON decode failure on `search` as "stale copy".
+26. **"Committed while claimed" is NOT enforced** (decided 2026-09-01).
+    The tool checks that a trailered commit's task was claimed at some
+    point (`linked-never-claimed`, open tasks only); it does not check that
+    each commit landed inside a claim window or was made by the claim
+    holder. Both candidate mechanisms were rejected: a Log-window check
+    false-positives on squash merges (author dates rewritten to merge
+    time) with no repair on an open task, and a `Ledger-Session:` trailer
+    is per-commit ceremony (decision #14) and an agent assertion (§3), not
+    git truth. Orchestrator tracking is served by the claim / release Log
+    lines, `list --mine`, `next.held` and `report` instead. Revisit only if
+    a wave shows commits landing against unclaimed-but-once-claimed tasks;
+    then a window check at `info` tier before any trailer.

@@ -1,10 +1,12 @@
 ---
 id: T-y7j9tx
 title: Decide: enforce 'committed while claimed' (linked-outside-claim)
-status: todo
+status: in_progress
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T03:29:15Z
 tags: ownership, decision
 ---
 
@@ -24,8 +26,8 @@ T-fkywmw (write-path claim nonce — different mechanism, same defer-until-obser
 
 ## Next Steps
 
-- [ ] Human picks A/B/C; if C, drop this task with the answer as --why
-- [ ] If A: implement at info tier with the interval rules below; if B: extend TRAILER_RE/_parse_trailers and the claim-actor match
+- [x] Human picks A/B/C; if C, drop this task with the answer as --why
+- [x] If A: implement at info tier with the interval rules below; if B: extend TRAILER_RE/_parse_trailers and the claim-actor match
 
 ## Open Questions
 
@@ -42,3 +44,6 @@ T-fkywmw (write-path claim nonce — different mechanism, same defer-until-obser
 - 2026-09-01T23:48:48Z [claude-2026-09-01-a] block: on human — decision recorded in Open Questions; do not implement until answered
 - 2026-09-02T00:54:59Z [claude-2026-09-01-b] answer: 'HUMAN: Enforce 'committed while claimed'? (A) `linked-outside-claim` from Log claim windows vs commit author dates — catches only commits landing outside every window, misses commits during a foreign fresh claim, and a squash-merge false positive on an open task has no repair unless emitted at `info` tier; (B) a `Ledger-Session:` trailer matched to the claim actor — true 'by that worker' but per-commit ceremony (decision #14) and an agent assertion (§3 trust model); (C) keep claims advisory as DESIGN §5/§7(f) rule and revisit only if a wave shows commits landing against unclaimed-but-once-claimed tasks. Recommendation: C; if evidence appears, A at info tier before B.' -> (C) claims stay advisory. Operator criteria: (A) false-positives on squash merges with no repair and (B) adds per-commit ceremony agents fumble; orchestrator tracking is served by the claim/release Log lines, list --mine and the report instead. Record as a DESIGN decision and close.
 - 2026-09-02T00:54:59Z [claude-2026-09-01-b] unblock: -> todo
+- 2026-09-02T03:29:15Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T03:29:36Z [claude-2026-09-01-b] step: checked 'Human picks A/B/C; if C, drop this task with the answer as --why'
+- 2026-09-02T03:29:36Z [claude-2026-09-01-b] step: checked 'If A: implement at info tier with the interval rules below; if B: extend TRAILER_RE/_parse_trailers and the claim-actor match'
