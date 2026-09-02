@@ -467,11 +467,17 @@ class Task:
             return None
         return first
 
-    def last_activity(self) -> str:
+    def last_activity(self, holder_only: bool = False) -> str:
+        """Newest timestamp on the task. With holder_only, only the claim
+        holder's own Log lines (plus created / claimed_at) count, so a
+        third party's diagnostic note on a stranded worker's task cannot
+        reset its staleness clock."""
         candidates = [self.header.get("created", ""),
                       self.header.get("claimed_at", ""),
                       self.header.get("closed", "")]
-        candidates += [e["ts"] for e in self.log()]
+        holder = self.header.get("claimed_by")
+        candidates += [e["ts"] for e in self.log()
+                       if not (holder_only and holder and e["actor"] != holder)]
         valid = [c for c in candidates if TS_RE.match(c or "")]
         return max(valid) if valid else ""
 
@@ -1502,10 +1508,14 @@ def task_digest(ctx: Ctx, task: Task, last: int = 10,
         truncated["recent_log"] = {
             "total": len(log), "omitted": len(log) - keep,
             "retrieve_with": f"ledger brief {task.id} --last {len(log)} --json"}
+    handoffs = [e for e in log if e["verb"] in ("release", "block")]
     out = {
         "header": {k: task.header.get(k) for k in HEADER_ORDER
                    if k in task.header},
         "path": str(task.path) if task.path else None,
+        # the single most valuable line for a resuming session, kept out of
+        # the capped recent_log
+        "last_handoff": handoffs[-1] if handoffs else None,
         "steps_open": cap("steps_open", [s for s in steps if not s["done"]],
                           show_cmd),
         "steps_total": len(steps),
@@ -1537,7 +1547,12 @@ def digest_human(d: dict) -> list[str]:
            f"{h.get('title')} — {h.get('status')}"
            + (f", claimed by {h['claimed_by']}" if h.get("claimed_by") else "")
            + (f", blocked on {h['blocked_on']}" if h.get("blocked_on") else ""),
-           f"  spec: {d['spec_lines']} line(s) in {d['path']}",
+           f"  spec: {d['spec_lines']} line(s) in {d['path']}"]
+    if d.get("last_handoff"):
+        lh = d["last_handoff"]
+        out.append(f"  last handoff: {lh['ts']} [{lh['actor']}] {lh['verb']}: "
+                   f"{lh['text']}")
+    out += [
            f"  steps: {d['steps_done']}/{d['steps_total']} done"]
     for s in d["steps_open"]:
         out.append(f"    [ ] {s['n']}. {s['text']}")
@@ -1605,7 +1620,9 @@ def sort_key(task: Task):
 def claim_is_stale_at(task: Task, stale_days: int, ref_ts: str | None) -> bool:
     """Staleness relative to ref_ts (a UTC Z stamp) instead of now — the
     report asks "was this claim stranded at the end of the window?"."""
-    last = task.last_activity()
+    # a claimed task ages by its HOLDER's activity; an unclaimed one (a
+    # handoff) by any activity
+    last = task.last_activity(holder_only=bool(task.header.get("claimed_by")))
     dt = parse_ts(last)
     if dt is None:
         return True
@@ -1784,8 +1801,14 @@ def compute_eligible(tasks: list[Task], config: dict):
                         f"{holder.header.get('claimed_at', '?')})"})
             continue
         eligible.append((task, flag))
+    contention: dict[str, list[str]] = {}
+    for t in sorted(tasks, key=sort_key):
+        if t.status == "in_progress" and not claim_is_stale(t, stale_days):
+            for r in t.resources:
+                contention.setdefault(r, []).append(t.id)
+    contention = {r: ids for r, ids in contention.items() if len(ids) > 1}
     return (eligible, why, human, stale_blocks,
-            {r: t.id for r, t in held.items()})
+            {r: t.id for r, t in held.items()}, contention)
 
 
 def blocked_on_closed_warnings(closed: Task, all_tasks: list) -> list[dict]:
@@ -2082,6 +2105,9 @@ def cmd_list(args) -> int:
     depends_on = None
     if getattr(args, "depends_on", None):
         depends_on = load_task_or_die(ctx, args.depends_on).id
+    members: list[str] | None = None
+    if getattr(args, "member_of", None):
+        members = load_task_or_die(ctx, args.member_of).depends_on
     rows = []
     for task in sorted(tasks, key=sort_key):
         # no status gate on --mine: a coherence violation stays visible
@@ -2100,6 +2126,8 @@ def cmd_list(args) -> int:
                 task.header.get("blocked_on") or "").startswith(args.blocked_on):
             continue
         if depends_on and depends_on not in task.depends_on:
+            continue
+        if members is not None and task.id not in members:
             continue
         if args.claimed and not task.header.get("claimed_by"):
             continue
@@ -2165,8 +2193,8 @@ def cmd_next(args) -> int:
     bad = structural_problem_stems(problems)
     pool = [t for t in tasks
             if t.id not in bad and (t.path is None or t.path.stem not in bad)]
-    eligible, why, human_blocked, stale_blocks, resources_held = \
-        compute_eligible(pool, ctx.config)
+    (eligible, why, human_blocked, stale_blocks, resources_held,
+     resource_contention) = compute_eligible(pool, ctx.config)
     for stem in sorted(bad):
         why.append({"id": stem, "ineligible_because":
                     "file has structural problems — run ledger validate and "
@@ -2228,6 +2256,7 @@ def cmd_next(args) -> int:
                 "blocked_on_human": human_blocked,
                 "stale_blocks": stale_blocks, "held": held,
                 "resources_held": resources_held,
+                "resource_contention": resource_contention,
                 "actor": {"id": ctx.actor, "source": ctx.actor_source}}
         if truncated:
             data["truncated"] = truncated
@@ -2280,6 +2309,7 @@ def cmd_next(args) -> int:
             "why": why, "blocked_on_human": human_blocked,
             "stale_blocks": stale_blocks, "held": held,
             "resources_held": resources_held,
+            "resource_contention": resource_contention,
             "actor": {"id": ctx.actor, "source": ctx.actor_source}}
     if truncated:
         data["truncated"] = truncated
@@ -2304,11 +2334,17 @@ def cmd_claim(args) -> int:
     if task.status in ("done", "dropped"):
         raise LedgerError("bad-state", f"{task.id} is {task.status}",
                           task=task.id, fix_hint="closed tasks cannot be claimed")
+    handoff = ""
     if task.status == "blocked":
-        raise LedgerError(
-            "bad-state",
-            f"{task.id} is blocked on {task.header.get('blocked_on', '?')}",
-            task=task.id, fix_hint="ledger unblock <id> first")
+        reason = task.header.get("blocked_on", "?")
+        if reason.startswith("external:") and not task.header.get("claimed_by"):
+            # a handed-off task carries no claim to steal: the integrator
+            # takes it in one locked step instead of unblock + claim
+            handoff = f" (was blocked on {reason})"
+        else:
+            raise LedgerError(
+                "bad-state", f"{task.id} is blocked on {reason}",
+                task=task.id, fix_hint="ledger unblock <id> first")
     takeover = None
     if task.status == "in_progress":
         holder = task.header.get("claimed_by", "?")
@@ -2330,7 +2366,7 @@ def cmd_claim(args) -> int:
     warnings = _identity_guard(ctx, "claim")
     all_tasks, _ = load_all_tasks(ctx)
     extra = _resource_guard(task, all_tasks, stale_days, args.force, "claim")
-    apply_claim(task, ctx.actor, takeover, extra)
+    apply_claim(task, ctx.actor, takeover, handoff + extra)
     save_task(task)
     emit(args, True, {"id": task.id, "claimed_by": ctx.actor,
                       "actor": {"id": ctx.actor, "source": ctx.actor_source}},
@@ -2467,9 +2503,20 @@ def cmd_set(args) -> int:
         if not deps:
             task.header.pop("depends_on", None)
     tags = task.tags
+    lease_notes: list[str] = []
     for tag in (args.add_tag or []):
         tag = _clean_tag(tag)
         if tag not in tags:
+            if tag.startswith("resource:") and task.status == "in_progress":
+                # a tag is a lease on an in_progress task: same guard as
+                # claim/unblock, same --force, same journaled suffix
+                all_tasks, _ = load_all_tasks(ctx)
+                stale_days = int(ctx.config.get("stale_claim_days", 7))
+                probe = Task(header=dict(task.header, tags=", ".join(tags + [tag])),
+                             sections=task.sections, path=task.path)
+                lease_notes.append(_resource_guard(
+                    probe, all_tasks, stale_days,
+                    getattr(args, "force", False), "set"))
             tags.append(tag)
             changes.append(("tags", "+", tag))
     for tag in (args.remove_tag or []):
@@ -2486,7 +2533,10 @@ def cmd_set(args) -> int:
                                    "--add-depends/--remove-depends/--add-tag/"
                                    "--remove-tag")
     for field, old, new in changes:
-        task.append_log(ctx.actor, "set", f"{field} {old} -> {new}")
+        suffix = ""
+        if field == "tags" and old == "+" and lease_notes:
+            suffix = lease_notes.pop(0)
+        task.append_log(ctx.actor, "set", f"{field} {old} -> {new}{suffix}")
     save_task(task)
     emit(args, True, {"id": task.id,
                       "changes": [{"field": f, "old": o, "new": n}
@@ -2894,17 +2944,29 @@ def _link_commits(ctx: Ctx, task: Task, refs: list[str]) -> list[dict]:
         raise LedgerError("no-git", "not inside a git repository",
                           fix_hint="commit linking needs git")
     linked = []
+    index = reachable_index(repo)
     for ref in refs:
         info = git_resolve_commit(repo, ref)
         if info is None:
             raise LedgerError("no-such-commit",
                               f"'{ref}' does not resolve to a commit",
                               task=task.id)
+        info["reachable"] = (index is None) or is_reachable(index, info["sha"])
         if task.append_commit_line(info["sha7"], info["date"], info["subject"]):
             task.append_log(ctx.actor, "link",
                             f"{info['sha7']} {info['subject']}")
             linked.append(info)
     return linked
+
+
+def _unreachable_warnings(task: Task, linked: list[dict]) -> list[dict]:
+    return [err("sha-unreachable",
+                f"{i['sha7']} is not reachable from any branch, tag or remote "
+                "ref (a reset or another checkout's commit?)", task=task.id,
+                severity="warning",
+                fix_hint="push/merge the branch that holds it, or ledger unlink "
+                         f"{task.id} {i['sha7']}")
+            for i in linked if not i.get("reachable", True)]
 
 
 def cmd_link(args) -> int:
@@ -2914,6 +2976,7 @@ def cmd_link(args) -> int:
     save_task(task)
     emit(args, True,
          {"id": task.id, "linked": linked, "commits": task.commits()},
+         errors=_unreachable_warnings(task, linked),
          human=[f"linked {len(linked)} commit(s) to {task.id}"])
     return 0
 
@@ -3206,8 +3269,28 @@ def cmd_scan(args) -> int:
                 similar_pairs.append({"a": a.id, "b": b.id,
                                       "score": round(score, 3)})
     similar_pairs.sort(key=lambda x: -x["score"])
+    # cross-branch double work: a header-field deletion on one branch never
+    # conflicts with body activity on the other, so the merge is silent —
+    # the Log signature is events by two or more actors after the newest
+    # claim line
+    contended = []
+    for t in tasks:
+        if t.status not in OPEN_STATUSES:
+            continue
+        log = sorted(t.log(), key=lambda e: e["ts"])
+        claims = [e for e in log if e["verb"] == "claim"]
+        if not claims:
+            continue
+        since = claims[-1]["ts"]
+        # creation and decision traffic (add / question / answer) is not
+        # work on the task; everything else by a second actor is
+        actors = sorted({e["actor"] for e in log if e["ts"] >= since
+                         and e["verb"] not in ("add", "question", "answer")})
+        if len(actors) > 1:
+            contended.append({"task": t.id, "actors": actors, "since": since})
     data = {"linked": linked, "exempt": exempt, "unlinked": unlinked,
             "dangling": dangling, "backfilled": backfilled,
+            "contended": contended,
             "pruned": pruned, "prune_refused": prune_refused,
             "commits_scanned": len(commits),
             "exempt_policy_violations": policy_violations,
@@ -3264,6 +3347,10 @@ def cmd_scan(args) -> int:
         for r in prune_refused]
     for r in refusals:
         human.append(f"  prune refused {r['task']}: {r['fix_hint']}")
+    for c in contended:
+        human.append(f"  contended {c['task']}: events by "
+                     f"{', '.join(c['actors'])} since {c['since']} — check "
+                     "for double work")
     return emit_read(args, data, refusals + problems, human)
 
 
@@ -3278,7 +3365,17 @@ def cmd_done(args) -> int:
 
     linked_now: list[str] = []
     if args.commit:
-        linked_now += [i["sha7"] for i in _link_commits(ctx, task, args.commit)]
+        infos = _link_commits(ctx, task, args.commit)
+        bad = _unreachable_warnings(task, infos)
+        if bad and not args.force:
+            # "a closed task can never be born red": evidence nobody else
+            # can see is refused (nothing is saved); --force to override
+            for b in bad:
+                b["severity"] = "error"
+                b["code"] = "done-evidence"
+            emit(args, False, {"id": task.id, "linked": []}, errors=bad)
+            return 2
+        linked_now += [i["sha7"] for i in infos]
     if repo is not None:
         commits, _error = walk_commits(repo, ctx.config.get("baseline"))
         if commits:
@@ -4659,6 +4756,10 @@ def cmd_report(args) -> int:
         "priority": priority,
         "agents": {"workers": sorted(workers), "by_actor": by_actor,
                    "active_claims": active, "stranded_claims": stranded},
+        "handoffs": {
+            "awaiting_integration": [
+                t.id for t in population if t.status == "blocked"
+                and (t.header.get("blocked_on") or "").startswith("external: ready")]},
         "durations": durations,
         "commits": commits_block,
         "sources": {
@@ -4918,6 +5019,9 @@ def build_parser() -> Parser:
     p.add_argument("--depends-on", metavar="ID",
                    help="only tasks whose depends_on names this task "
                         "(reverse lookup: which wave was T-x in?)")
+    p.add_argument("--member-of", metavar="ID",
+                   help="only the tasks this task depends on (a wave's "
+                        "members with their status)")
     p.add_argument("--claimed", action="store_true")
     p.add_argument("--unclaimed", action="store_true")
     p.add_argument("--mine", action="store_true",
@@ -4987,6 +5091,9 @@ def build_parser() -> Parser:
     p.add_argument("--remove-depends", action="append")
     p.add_argument("--add-tag", action="append")
     p.add_argument("--remove-tag", action="append")
+    p.add_argument("--force", action="store_true",
+                   help="add a resource:<slug> tag to an in_progress task "
+                        "although another fresh claim leases it")
     p.set_defaults(fn=cmd_set)
 
     p = sub.add_parser("note", parents=[common],

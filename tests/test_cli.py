@@ -1317,3 +1317,104 @@ def test_hints_name_real_commands_and_indexes(repo):
     assert "MOOT" in by_code["done-loose-ends"]["fix_hint"]
     assert "reopen" not in by_code["done-evidence"]["fix_hint"]
     assert "ledger link" in by_code["done-evidence"]["fix_hint"]
+
+
+
+# --- orchestration signals (sweep 2026-09-02, task K) -----------------------
+
+def test_scan_reports_contended_tasks(repo):
+    tid = repo.add_task("Contended")
+    repo.j("claim", tid, "--session", "b")
+    repo.j("note", tid, "b working", "--session", "b")
+    assert repo.j("scan")["data"]["contended"] == []
+    repo.j("note", tid, "orch also touched it", "--session", "orch")
+    c = repo.j("scan")["data"]["contended"]
+    assert c and c[0]["task"] == tid and c[0]["actors"] == ["b", "orch"]
+    r = repo.run("scan")
+    assert f"contended {tid}" in r.stdout
+
+
+def test_claim_takes_an_external_handoff_in_one_step(repo):
+    tid = repo.add_task("Handed off")
+    repo.j("claim", tid, "--session", "worker")
+    repo.j("release", tid, "--blocked", "--on", "external: ready for integration",
+           "--session", "worker")
+    d = repo.j("claim", tid, "--session", "integrator")
+    assert d["ok"]
+    h = repo.j("show", tid)["data"]["header"]
+    assert h["status"] == "in_progress" and h["claimed_by"] == "integrator"
+    assert "blocked_on" not in h
+    assert "was blocked on external: ready" in repo.j("show", tid)["data"]["log"][-1]["text"]
+    human = repo.add_task("Human gate")
+    repo.j("block", human, "--on", "human")
+    assert repo.j("claim", human, expect=2)["errors"][0]["code"] == "bad-state"
+
+
+def test_done_refuses_unreachable_evidence_and_link_warns(repo):
+    tid = repo.add_task("Unreachable evidence")
+    repo.j("claim", tid)
+    repo.commit_all("Track the task first")
+    (repo.root / "gone.py").write_text("g\n", encoding="utf-8")
+    sha = repo.commit_all("Will be reset away")
+    repo.git("reset", "-q", "--hard", "HEAD~1")
+    d = repo.j("done", tid, "--commit", sha, expect=2)
+    assert d["errors"][0]["code"] == "done-evidence"
+    assert "not reachable" in d["errors"][0]["message"]
+    assert repo.j("show", tid)["data"]["commits"] == []  # nothing saved
+    d = repo.j("link", tid, sha)
+    warn = [e for e in d["errors"] if e["code"] == "sha-unreachable"]
+    assert d["ok"] and warn and "unlink" in warn[0]["fix_hint"]
+    assert repo.j("done", tid, "--force")["ok"]
+
+
+def test_resource_contention_is_visible_and_tags_are_guarded(repo):
+    a = repo.add_task("Holder A", "--tag", "resource:gpu")
+    b = repo.add_task("Holder B", "--tag", "resource:gpu")
+    c = repo.add_task("Late tagger")
+    repo.j("claim", a, "--session", "x")
+    repo.j("claim", b, "--session", "y", "--force")
+    n = repo.j("next", "--session", "z")["data"]
+    assert set(n["resource_contention"]["gpu"]) == {a, b}  # same-second ids
+    repo.j("claim", c, "--session", "w")
+    refused = repo.j("set", c, "--add-tag", "resource:gpu", "--session", "w",
+                     expect=2)
+    assert refused["errors"][0]["code"] == "resource-held"
+    assert "resource:gpu" not in repo.read(c)
+    d = repo.j("set", c, "--add-tag", "resource:gpu", "--session", "w", "--force")
+    assert d["ok"]
+    log = repo.j("show", c)["data"]["log"][-1]
+    assert log["verb"] == "set" and "also held by" in log["text"]
+    assert repo.j("set", c, "--add-tag", "plain", "--session", "w")["ok"]
+
+
+def test_staleness_follows_the_holder_not_bystanders(repo):
+    from test_hardening import set_stale_days
+    tid = repo.add_task("Stranded worker")
+    repo.j("claim", tid, "--session", "worker")
+    set_stale_days(repo, -1)
+    repo.j("note", tid, "orch: worker has not reported", "--session", "orch")
+    rc = repo.run("validate", "--no-git", "--json")
+    v = json.loads(rc.stdout)
+    assert any(e["code"] == "stale-claim" and e["task"] == tid for e in v["errors"])
+    repo.j("note", tid, "still here", "--session", "worker")
+    set_stale_days(repo, 7)
+    v = json.loads(repo.run("validate", "--no-git", "--json").stdout)
+    assert not any(e["code"] == "stale-claim" for e in v["errors"])
+
+
+def test_member_of_handoffs_and_last_handoff(repo):
+    m1 = repo.add_task("Member one", "-p", "p1")
+    m2 = repo.add_task("Member two", "-p", "p2")
+    w = repo.j("add", "Wave", "--after", m1, "--after", m2)["data"]["id"]
+    rows = repo.j("list", "--member-of", w)["data"]["tasks"]
+    assert [t["id"] for t in rows] == [m1, m2]
+    repo.j("claim", m1)
+    repo.j("release", m1, "--blocked", "--on", "external: ready for integration",
+           "--note", "green locally")
+    r = repo.j("report", "--task", w)["data"]
+    assert r["handoffs"]["awaiting_integration"] == [m1]
+    d = repo.j("brief", m1)["data"]
+    assert d["last_handoff"]["verb"] == "release"
+    assert "green locally" in d["last_handoff"]["text"]
+    assert "last handoff:" in repo.run("brief", m1).stdout
+    assert repo.j("brief", m2)["data"]["last_handoff"] is None

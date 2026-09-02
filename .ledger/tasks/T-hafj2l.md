@@ -1,10 +1,12 @@
 ---
 id: T-hafj2l
 title: Orchestration signals: scan contended, claim on external handoffs, done refuses unreachable evidence, resource contention in next, set --add-tag lease guard, holder-only staleness, list --member-of, report handoffs, last_handoff in the digest
-status: todo
+status: in_progress
 priority: p2
 size: m
 created: 2026-09-02T11:44:58Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T12:22:46Z
 tags: orchestration
 ---
 
@@ -31,3 +33,4 @@ Tests for each; DESIGN §5/§7/§8 sentences; README rows.
 ## Log
 
 - 2026-09-02T11:44:58Z [claude-2026-09-01-b] add: created: Orchestration signals: scan contended, claim on external handoffs, done refuses unreachable evidence, resource contention in next, set --add-tag lease guard, holder-only staleness, list --member-of, report handoffs, last_handoff in the digest [p2/m] (tags: orchestration)
+- 2026-09-02T12:22:46Z [claude-2026-09-01-b] claim: claimed

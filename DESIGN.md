@@ -533,7 +533,21 @@ reduces to git's per-line merge on one small Markdown file.
   spawner, which reads `list --claimed --json`); a cross-branch double-hold
   merges cleanly and surfaces post-merge — detected, not prevented (f).
   Not in PROTOCOL_TEXT (review §22): the `why` line teaches the agent at the
-  moment it matters.
+  moment it matters. `next` also reports `resource_contention` (every
+  slug with more than one fresh holder), `set --add-tag resource:<slug>` on
+  an in_progress task goes through the same guard (a tag IS a lease), and a
+  claimed task's staleness is measured from its HOLDER's activity only, so
+  an orchestrator's diagnostic note on a stranded worker cannot reset the
+  clock (2026-09-02).
+- **(i) Cross-branch double work is detected, not prevented:** a
+  header-field deletion (`release --force`, `done`) on one branch never
+  conflicts with body activity on the other, so the merge is silent. `scan`
+  reports `contended` — open tasks whose Log shows events by two or more
+  actors after the newest claim line — in the post-merge ritual. The
+  integration handoff is ownable: `claim` accepts a task blocked on an
+  `external:` reason that carries no claim, in one locked step. `done
+  --commit <sha>` refuses evidence nobody else can see (a sha unreachable
+  from every ref) unless `--force`; `link` warns.
 - **Post-merge ritual:** `ledger validate --coverage` + `ledger scan --write`
   (`--coverage` is what runs the Log tamper checks).
 
