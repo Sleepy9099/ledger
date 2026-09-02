@@ -143,7 +143,10 @@ block <id> --on human|T-x|external:  explicit blockage; unblock reverses
                                      (done/drop/next flag blocks whose
                                      target task has since closed)
 link <id> <sha|HEAD>                 attach commit evidence
-scan --write                         reconcile git trailers -> ## Commits
+unlink <id> <sha> [--why]            remove one (journaled; never silent)
+scan --write [--prune]               reconcile git trailers -> ## Commits;
+                                     --prune drops pointers no longer
+                                     reachable from HEAD (history rewrite)
 done <id> [--commit HEAD]            close with evidence; refuses on open
                                      steps/questions; closed is terminal
 drop <id> --why "..."                close as won't-do (files never deleted);

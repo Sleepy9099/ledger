@@ -1,10 +1,12 @@
 ---
 id: T-nxww2u
 title: Remove dead ## Commits lines: scan --prune and ledger unlink, with a Log line each
-status: todo
+status: in_progress
 priority: p1
 size: s
 created: 2026-09-02T08:54:43Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T08:56:41Z
 tags: integrity
 ---
 
@@ -31,3 +33,4 @@ Nothing removes a `## Commits` line: `_link_commits` and `scan --write` only app
 ## Log
 
 - 2026-09-02T08:54:43Z [claude-2026-09-01-b] add: created: Remove dead ## Commits lines: scan --prune and ledger unlink, with a Log line each [p1/s] (tags: integrity)
+- 2026-09-02T08:56:41Z [claude-2026-09-01-b] claim: claimed

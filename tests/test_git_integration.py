@@ -638,5 +638,63 @@ def test_sha_unreachable_asks_head_reachability_not_local_existence(repo):
     unreachable = [e for e in payload["errors"] if e["code"] == "sha-unreachable"]
     assert [e["task"] for e in unreachable] == [tid]
     assert "reachable from HEAD" in unreachable[0]["message"]
-    assert "scan --write" in unreachable[0]["fix_hint"]
+    assert "scan --prune" in unreachable[0]["fix_hint"]
     assert repo.j("show", tid)["data"]["commits"][0]["sha"] == old[:7]
+
+
+
+# --- scan --prune and unlink (T-nxww2u) --------------------------------------
+
+def test_scan_prune_drops_dead_pointers_and_journals_each(repo):
+    a = repo.add_task("Rewritten A")
+    b = repo.add_task("Rewritten B")
+    repo.j("claim", a)
+    repo.j("claim", b)
+    base = repo.commit_all("Track tasks")  # bookkeeping
+    (repo.root / "a.py").write_text("a", encoding="utf-8")
+    old_a = repo.commit_all("Work A", (f"Ledger-Task: {a}",))
+    (repo.root / "b.py").write_text("b", encoding="utf-8")
+    old_b = repo.commit_all("Work B", (f"Ledger-Task: {b}",))
+    repo.j("link", a, old_a)
+    repo.j("link", b, old_b)
+    # the rewrite: squash both work commits into one new commit (the old
+    # shas survive only in the reflog; the task files still cite them)
+    repo.git("reset", "-q", "--soft", base)
+    squashed = repo.commit_all("Work A+B (rewritten)",
+                               (f"Ledger-Task: {a}\nLedger-Task: {b}",))
+    rc, payload = validate(repo)
+    dead = {e["task"] for e in payload["errors"] if e["code"] == "sha-unreachable"}
+    assert dead == {a, b}  # both cited shas died in the rewrite
+    d = repo.j("scan", "--write")["data"]  # --write alone never removes
+    assert d["pruned"] == [] and old_a[:7] in repo.read(a)
+    d = repo.j("scan", "--prune")["data"]
+    pruned = {(p["task"], p["sha"]) for p in d["pruned"]}
+    assert pruned == {(a, old_a[:7]), (b, old_b[:7])}
+    assert old_a[:7] not in repo.read(a).split("## Log")[0]
+    log_a = repo.j("show", a)["data"]["log"]
+    assert log_a[-1]["verb"] == "unlink" and old_a[:7] in log_a[-1]["text"]
+    assert "history rewrite" in log_a[-1]["text"]
+    # --prune implies --write: the live trailer link was re-materialized
+    assert squashed[:7] in repo.read(a) and squashed[:7] in repo.read(b)
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]
+    assert repo.j("scan", "--prune")["data"]["pruned"] == []  # idempotent
+
+
+def test_unlink_is_explicit_journaled_and_loud(repo):
+    tid = repo.add_task("Evidence removal")
+    repo.j("claim", tid)
+    (repo.root / "u.py").write_text("u\n", encoding="utf-8")
+    sha = repo.commit_all("Untrailered work")
+    repo.j("done", tid, "--commit", "HEAD")
+    missing = repo.j("unlink", tid, "0000000", expect=2)
+    assert missing["errors"][0]["code"] == "no-such-commit-line"
+    d = repo.j("unlink", tid, sha, "--why", "linked the wrong task")
+    assert d["data"]["unlinked"] == [sha[:7]] and d["data"]["commits"] == []
+    log = repo.j("show", tid)["data"]["log"]
+    assert log[-1]["verb"] == "unlink"
+    assert log[-1]["text"] == f"{sha[:7]} linked the wrong task"
+    rc, payload = validate(repo, "--coverage")  # loud on both sides
+    assert "done-evidence" in codes(payload)
+    assert any(e["code"] == "coverage" and sha[:7] in e["message"]
+               for e in payload["errors"])

@@ -88,10 +88,10 @@ directly with your file tools. Always pass `--json` and parse
 
 ## After any merge or rebase
 
-- Run `ledger validate --coverage` and `ledger scan --write`; fix what
-  they report. Log-section conflict: keep BOTH sides' lines, delete the
-  markers (timestamped, order-free). Header-field conflict: pick the value
-  matching the latest Log event, then re-run `ledger validate`.
+- Run `ledger validate --coverage` and `ledger scan --write` (`--prune`
+  after a history rewrite drops dead pointers); fix what they
+  report. Log conflict: keep BOTH sides' lines, drop the markers. Header
+  conflict: keep the value matching the latest Log event; re-run validate.
 
 ## Never
 

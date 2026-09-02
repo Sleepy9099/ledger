@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.3.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 13
+PROTOCOL_VERSION = 14
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -236,10 +236,10 @@ directly with your file tools. Always pass `--json` and parse
 
 ## After any merge or rebase
 
-- Run `ledger validate --coverage` and `ledger scan --write`; fix what
-  they report. Log-section conflict: keep BOTH sides' lines, delete the
-  markers (timestamped, order-free). Header-field conflict: pick the value
-  matching the latest Log event, then re-run `ledger validate`.
+- Run `ledger validate --coverage` and `ledger scan --write` (`--prune`
+  after a history rewrite drops dead pointers); fix what they
+  report. Log conflict: keep BOTH sides' lines, drop the markers. Header
+  conflict: keep the value matching the latest Log event; re-run validate.
 
 ## Never
 
@@ -475,6 +475,18 @@ class Task:
         cur = self.get_section("Commits")
         self.set_section("Commits", (cur + "\n" + line) if cur else line)
         return True
+
+    def remove_commit_line(self, sha: str) -> str | None:
+        """Remove the cache line citing sha (prefix match either way);
+        returns the removed line's sha, or None. Callers journal it."""
+        lines = self.get_section("Commits").split("\n")
+        for i, line in enumerate(lines):
+            m = COMMIT_LINE_RE.match(line)
+            if m and (m.group(1).startswith(sha) or sha.startswith(m.group(1))):
+                del lines[i]
+                self.set_section("Commits", "\n".join(lines).strip("\n"))
+                return m.group(1)
+        return None
 
 
 def parse_task(text: str) -> tuple[Task | None, list[dict]]:
@@ -2765,6 +2777,67 @@ def cmd_link(args) -> int:
     return 0
 
 
+def cmd_unlink(args) -> int:
+    """Remove ## Commits lines on purpose. Journaled (`unlink:` Log line)
+    and loud: a task or commit that loses its last link is caught by
+    done-evidence / coverage, never silently."""
+    ctx = make_ctx(args, mutating=True)
+    task = load_task_or_die(ctx, args.id, for_write=True)
+    why = sanitize_inline(args.why) if args.why else "unlinked"
+    removed = []
+    for ref in args.sha:
+        sha = ref.strip().lower()
+        if not SHA_TOKEN_RE.fullmatch(sha):
+            info = git_resolve_commit(ctx.repo, ref) if ctx.repo else None
+            if info is None:
+                raise LedgerError(
+                    "no-such-commit-line",
+                    f"'{ref}' is not a cited sha on {task.id}", task=task.id,
+                    fix_hint="ledger show <id> lists the ## Commits lines")
+            sha = info["sha"]
+        hit = task.remove_commit_line(sha)
+        if hit is None:
+            raise LedgerError(
+                "no-such-commit-line",
+                f"{task.id} does not cite {ref}", task=task.id,
+                fix_hint="ledger show <id> lists the ## Commits lines")
+        task.append_log(ctx.actor, "unlink", f"{hit} {why}")
+        removed.append(hit)
+    save_task(task)  # every refusal above happens before this write
+    emit(args, True, {"id": task.id, "unlinked": removed,
+                      "commits": task.commits()},
+         human=[f"unlinked {len(removed)} commit(s) from {task.id}"])
+    return 0
+
+
+def _prune_dead_commit_lines(ctx: Ctx, tasks: list[Task], repo: Path,
+                             skip_ids: set[str] | None = None) -> list[dict]:
+    """scan --prune: drop every cited sha no longer reachable from HEAD —
+    the repair after a history rewrite — journaling each removal."""
+    index = reachable_index(repo)
+    if index is None:
+        raise LedgerError("no-git", "git rev-list HEAD failed",
+                          fix_hint="prune needs a readable history")
+    pruned = []
+    for task in tasks:
+        if skip_ids and (task.id in skip_ids or
+                         (task.path and task.path.stem in skip_ids)):
+            continue
+        dead = [c["sha"] for c in task.commits()
+                if not is_reachable(index, c["sha"])]
+        if not dead:
+            continue
+        for sha in dead:
+            removed = task.remove_commit_line(sha)
+            if removed:
+                task.append_log(ctx.actor, "unlink",
+                                f"{removed} (unreachable from HEAD after a "
+                                "history rewrite)")
+                pruned.append({"task": task.id, "sha": removed})
+        save_task(task)
+    return pruned
+
+
 def _backfill_from_trailers(ctx: Ctx, tasks: list[Task],
                             commits: list[Commit],
                             skip_ids: set[str] | None = None) -> list[dict]:
@@ -2792,7 +2865,8 @@ def _backfill_from_trailers(ctx: Ctx, tasks: list[Task],
 
 
 def cmd_scan(args) -> int:
-    ctx = make_ctx(args, mutating=args.write)
+    prune = getattr(args, "prune", False)
+    ctx = make_ctx(args, mutating=args.write or prune)
     repo = ctx.repo
     if repo is None:
         raise LedgerError("no-git", "not inside a git repository")
@@ -2832,10 +2906,13 @@ def cmd_scan(args) -> int:
                 policy_violations.append({"sha": c.sha7, "paths": bad})
         else:
             unlinked.append({"sha": c.sha7, "subject": c.subject})
-    backfilled = []
-    if args.write:
+    backfilled, pruned = [], []
+    if args.write or prune:  # --prune implies --write
         backfilled = _backfill_from_trailers(
             ctx, tasks, commits, skip_ids=structural_problem_stems(problems))
+    if prune:
+        pruned = _prune_dead_commit_lines(
+            ctx, tasks, repo, skip_ids=structural_problem_stems(problems))
     # post-merge duplicate check: concurrent branches are exactly where
     # cross-branch duplicates are minted, and scan is the non-gating ritual
     # command that already walks the corpus (a fuzzy score never fails CI)
@@ -2852,6 +2929,7 @@ def cmd_scan(args) -> int:
     similar_pairs.sort(key=lambda x: -x["score"])
     data = {"linked": linked, "exempt": exempt, "unlinked": unlinked,
             "dangling": dangling, "backfilled": backfilled,
+            "pruned": pruned,
             "commits_scanned": len(commits),
             "exempt_policy_violations": policy_violations,
             "exempt_by_channel": by_channel,
@@ -2873,6 +2951,9 @@ def cmd_scan(args) -> int:
                      f"{d['id']} ({d['hint']})")
     if backfilled:
         human.append(f"  backfilled {len(backfilled)} commit line(s)")
+    if pruned:
+        human.append(f"  pruned {len(pruned)} dead pointer(s): "
+                     + ", ".join(f"{p['task']} {p['sha']}" for p in pruned[:10]))
     emit(args, True, data, errors=problems, human=human)
     return 0
 
@@ -3512,8 +3593,9 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
                         "from HEAD",
                         task=task.id, severity="warning",
                         fix_hint="normal after a history rewrite or a shallow "
-                                 "clone; ledger scan --write re-materializes "
-                                 "live trailer links"))
+                                 "clone; ledger scan --prune drops dead "
+                                 "pointers (each removal is journaled) and "
+                                 "re-adds live trailer links"))
 
     commits, walk_error = walk_commits(repo, ctx.config.get("baseline"))
     if commits is None:
@@ -4488,11 +4570,21 @@ def build_parser() -> Parser:
     p.add_argument("sha", nargs="+", help="commit sha or ref (e.g. HEAD)")
     p.set_defaults(fn=cmd_link)
 
+    p = sub.add_parser("unlink", parents=[common],
+                       help="remove ## Commits line(s) on purpose (journaled)")
+    p.add_argument("id")
+    p.add_argument("sha", nargs="+", help="cited sha (or a ref such as HEAD)")
+    p.add_argument("--why", help="reason for the Log line")
+    p.set_defaults(fn=cmd_unlink)
+
     p = sub.add_parser("scan", parents=[common],
                        help="reconcile git history against the ledger")
     p.add_argument("--since", help="scan <since>..HEAD instead of baseline")
     p.add_argument("--write", action="store_true",
                    help="backfill ## Commits lines from trailers")
+    p.add_argument("--prune", action="store_true",
+                   help="also drop cited shas no longer reachable from HEAD "
+                        "(implies --write; each removal is journaled)")
     p.set_defaults(fn=cmd_scan)
 
     p = sub.add_parser("done", parents=[common],

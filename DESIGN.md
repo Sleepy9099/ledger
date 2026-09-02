@@ -113,8 +113,13 @@ There is **no `updated` field** — it would conflict on every concurrent edit.
   `done`); answered form: `- [x] text -- ANSWERED (YYYY-MM-DD): answer`.
   No question numbering (numbers duplicate under merges); the CLI addresses
   questions by printed index or unique substring.
-- `## Commits` — append-only cache, one line per commit:
-  `- <sha7> <YYYY-MM-DD> <subject>`. Git trailers are the truth (§4).
+- `## Commits` — append-only cache in the ordinary flow, one line per
+  commit: `- <sha7> <YYYY-MM-DD> <subject>`. Git trailers are the truth (§4).
+  Two journaled exceptions remove lines: `scan --prune` drops every cited
+  sha no longer reachable from HEAD (the repair after a history rewrite) and
+  `unlink <id> <sha>` removes one on purpose; each removal appends an
+  `unlink:` Log line, and losing the last evidence is loud (`done-evidence`,
+  `coverage`), never silent.
 - `## Log` — **last section, append-only**. One line per event:
   `- <UTC-ISO> [<actor>] <verb>: <text>`. Verbs: add claim release note step
   question answer link block unblock set done done(no-code) note(dead-end)
