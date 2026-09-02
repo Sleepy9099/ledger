@@ -12,11 +12,11 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 ## Session start — always
 
 1. Export a session id once: `LEDGER_SESSION=claude-<YYYY-MM-DD>-<letter>`.
-2. `ledger next --claim --json` — this is your task. Read its file (Spec,
-   Next Steps, Open Questions; `ledger brief <id> --json` for the recent
-   Log and dead ends on long tasks) BEFORE writing code; that is your
-   handoff from previous sessions. If `task` is null, `why` explains it —
-   report that to the human instead of inventing work.
+2. `ledger next --claim --json` — this is your task (a bounded digest:
+   open steps, HUMAN questions, dead ends, recent Log; `--full` for
+   everything). Read its file (Spec, Next Steps, Open Questions) BEFORE
+   writing code; that is your handoff from previous sessions. If `task`
+   is null, `why` explains it — report that instead of inventing work.
 3. `ledger questions --human --json` — surface anything listed to the
    human in your first message.
 4. Before implementing, `ledger search <symbol|component|error> --json`

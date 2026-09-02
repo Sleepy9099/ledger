@@ -91,9 +91,9 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # storage-schema version the repo was bootstrapped at (written once by init,
 # never by a task-mutating command — config.json must not become a merge hot
 # spot).
-TOOL_VERSION = "1.1.0"
+TOOL_VERSION = "1.2.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 7
+PROTOCOL_VERSION = 8
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -142,11 +142,11 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 ## Session start — always
 
 1. Export a session id once: `LEDGER_SESSION=claude-<YYYY-MM-DD>-<letter>`.
-2. `ledger next --claim --json` — this is your task. Read its file (Spec,
-   Next Steps, Open Questions; `ledger brief <id> --json` for the recent
-   Log and dead ends on long tasks) BEFORE writing code; that is your
-   handoff from previous sessions. If `task` is null, `why` explains it —
-   report that to the human instead of inventing work.
+2. `ledger next --claim --json` — this is your task (a bounded digest:
+   open steps, HUMAN questions, dead ends, recent Log; `--full` for
+   everything). Read its file (Spec, Next Steps, Open Questions) BEFORE
+   writing code; that is your handoff from previous sessions. If `task`
+   is null, `why` explains it — report that instead of inventing work.
 3. `ledger questions --human --json` — surface anything listed to the
    human in your first message.
 4. Before implementing, `ledger search <symbol|component|error> --json`
@@ -1192,11 +1192,12 @@ def digest_human(d: dict) -> list[str]:
     return out
 
 
-def _brief_args_ok(args) -> None:
-    if not getattr(args, "brief", False) and (
-            getattr(args, "last", None) is not None
-            or getattr(args, "no_git", False)):
-        raise LedgerError("usage", "--last / --no-git need --brief",
+def _brief_args_ok(args, digest: bool) -> None:
+    """--last / --no-git only make sense for the digest shape."""
+    if not digest and (getattr(args, "last", None) is not None
+                       or getattr(args, "no_git", False)):
+        raise LedgerError("usage", "--last / --no-git apply to the digest "
+                          "shape only (show --brief; next without --full)",
                           exit_code=3)
 
 
@@ -1621,7 +1622,7 @@ def cmd_list(args) -> int:
 
 def cmd_show(args) -> int:
     ctx = make_ctx(args)
-    _brief_args_ok(args)
+    _brief_args_ok(args, digest=getattr(args, "brief", False))
     task = load_task_or_die(ctx, args.id, for_write=False)
     all_tasks, _ = load_all_tasks(ctx)
     if getattr(args, "brief", False):
@@ -1655,7 +1656,7 @@ def cmd_brief(args) -> int:
 
 
 def cmd_next(args) -> int:
-    _brief_args_ok(args)
+    _brief_args_ok(args, digest=not getattr(args, "full", False))
     ctx = make_ctx(args, mutating=args.claim)
     tasks, problems = load_all_tasks(ctx)
     bad = structural_problem_stems(problems)
@@ -1690,11 +1691,16 @@ def cmd_next(args) -> int:
         apply_claim(top, ctx.actor, takeover)
         save_task(top)
         claimed = True
-    if getattr(args, "brief", False):
-        trailer_map = {} if args.no_git else trailer_links(ctx)
-        payload = task_digest(ctx, top, args.last or 10, trailer_map, tasks)
-    else:
+    # the digest is the DEFAULT here: this is the one command every session
+    # runs, and the protocol already requires reading the task file, so the
+    # full Log would enter context twice. --full restores task_full; the
+    # shape depends only on the flag, never on data.
+    if getattr(args, "full", False):
         payload = task_full(ctx, top, trailer_links(ctx), tasks)
+    else:
+        trailer_map = {} if args.no_git else trailer_links(ctx)
+        last = 10 if args.last is None else args.last
+        payload = task_digest(ctx, top, last, trailer_map, tasks)
     data = {"task": payload,
             "claimed": claimed,
             "stale_takeover": flag == "stale_claim",
@@ -3206,8 +3212,9 @@ def build_parser() -> Parser:
     p.add_argument("--claim", action="store_true",
                    help="claim the top pick atomically")
     p.add_argument("-n", type=int, default=1, help="also list top N")
-    p.add_argument("--brief", action="store_true",
-                   help="return data.task as the bounded digest")
+    p.add_argument("--full", action="store_true",
+                   help="return data.task in show's full shape instead of "
+                        "the bounded digest")
     p.set_defaults(fn=cmd_next)
 
     p = sub.add_parser("claim", parents=[common], help="claim a task")

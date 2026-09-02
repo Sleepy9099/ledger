@@ -209,6 +209,13 @@ README.)
 
 Notable semantics:
 
+- `next` returns `data.task` as the bounded digest (`brief`'s shape) by
+  default — it is the one command every session runs and the protocol
+  already requires reading the task file, so the full Log would enter
+  context twice; `--full` restores `show`'s shape and the shape depends only
+  on the flag, never on data. `show` keeps the full shape (`--brief` opts
+  in). Host scripts that read `data.task.log` / `.spec` from `next` use
+  `--full`.
 - `next` eligibility: `todo` (plus `in_progress` with a stale claim, flagged
   as a takeover), all `depends_on` done, not blocked, size ≠ xl. Sort:
   priority, created, id. `why` always explains every near-miss
@@ -310,7 +317,9 @@ to tell whether their vendored copy is stale and whether their task corpus
 matches the schema that copy expects — offline, because the answer is
 needed before any command can be trusted. Three constants in `ledger.py`:
 
-- `TOOL_VERSION` — the file; bumps on every shipped behavior change.
+- `TOOL_VERSION` — the file; bumps on every shipped behavior change
+  (several changes landing before a copy is re-vendored share one bump;
+  a JSON-contract change such as `next`'s default shape is at least minor).
 - `SCHEMA_VERSION` — the §2 storage schema. Bump rule: any change an OLDER
   copy reports as an `enums` / `parse` / `state-coherence` ERROR (a new
   status value, a new required key, a new claim pairing) bumps it; a purely

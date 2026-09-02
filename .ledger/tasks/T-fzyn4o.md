@@ -1,10 +1,12 @@
 ---
 id: T-fzyn4o
 title: Decide: next --claim returns the digest shape by default
-status: todo
+status: in_progress
 priority: p3
 size: xs
 created: 2026-09-01T23:48:40Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T02:02:53Z
 depends_on: T-z7iebd, T-2e587s
 tags: ergonomics, context, decision
 ---
@@ -29,8 +31,8 @@ Default payload has the digest keys and no `log`; `--full` has the `task_full` k
 
 ## Next Steps
 
-- [ ] Human answers; unblock or drop
-- [ ] If approved: switch the default, add --full, update PROTOCOL_TEXT step 2, bump PROTOCOL_VERSION/TOOL_VERSION, re-run init
+- [x] Human answers; unblock or drop
+- [x] If approved: switch the default, add --full, update PROTOCOL_TEXT step 2, bump PROTOCOL_VERSION/TOOL_VERSION, re-run init
 
 ## Open Questions
 
@@ -50,3 +52,6 @@ Default payload has the digest keys and no `log`; `--full` has the `task_full` k
 - 2026-09-02T00:06:25Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: payload description aligned with T-z7iebd's digest keys (no next_steps key; open_questions is a count in the digest)
 - 2026-09-02T00:54:57Z [claude-2026-09-01-b] answer: 'HUMAN: After `brief` lands, should `next` return `data.task` in the digest shape by default with `--full` restoring today's payload (removes the double-load at every session start; the tool's own tests read only header/why/claimed/blocked_on_human), or keep `task_full` as the default and rely on the opt-in `--brief` (zero contract risk for host scripts that parse data.task.log)? A data-dependent shape (switch only above a Log-length threshold) is rejected either way.' -> Digest shape by default, --full restores task_full. Operator criteria: context-friendliness of the one mandatory command wins; the protocol already requires reading the task file, so the full Log entered context twice. Host scripts that parse data.task.log switch to --full or show; PROTOCOL_VERSION bumps in the same commit.
 - 2026-09-02T00:54:58Z [claude-2026-09-01-b] unblock: -> todo
+- 2026-09-02T02:02:53Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T02:02:54Z [claude-2026-09-01-b] step: checked 'Human answers; unblock or drop'
+- 2026-09-02T02:08:32Z [claude-2026-09-01-b] step: checked 'If approved: switch the default, add --full, update PROTOCOL_TEXT step 2, bump PROTOCOL_VERSION/TOOL_VERSION, re-run init'

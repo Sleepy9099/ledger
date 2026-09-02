@@ -20,7 +20,8 @@ def test_init_idempotent_and_bootstrap_files(repo):
     # the repair the protocol promises for a pushed commit is true (T-5z04ex)
     protocol = (ledger / "PROTOCOL.md").read_text(encoding="utf-8")
     for phrase in ("--add-depends", "not the action", "ready for integration",
-                   "not scope expansion", "ledger search", "ledger brief"):
+                   "not scope expansion", "ledger search", "bounded digest",
+                   "`--full`"):
         assert phrase in protocol and phrase in claude  # T-w0emnj, T-ntt2zz
     assert "ledger link <id> <sha>" in protocol
     assert "explicit link counts as coverage" in protocol
@@ -667,11 +668,19 @@ def test_show_and_next_brief_flags(repo):
     assert "recent_log" in digest and "log" not in digest
     assert "absorbed" in digest
     assert repo.run("show", tid, "--last", "2").returncode == 3  # needs --brief
-    n = repo.j("next", "--brief", "-n", "3")["data"]
+    # next: the digest is the DEFAULT (T-fzyn4o); --full restores task_full;
+    # -n rows stay header+counts either way
+    n = repo.j("next", "-n", "3", "--last", "2")["data"]
     assert "recent_log" in n["task"] and "log" not in n["task"]
+    assert len(n["task"]["recent_log"]) <= 2
     assert n["tasks"][0]["id"] == tid and "open_steps" in n["tasks"][0]
-    plain_next = repo.j("next")["data"]
-    assert "log" in plain_next["task"]
+    full_next = repo.j("next", "--full", "-n", "3")["data"]
+    assert "log" in full_next["task"] and "spec" in full_next["task"]
+    assert "open_steps" in full_next["tasks"][0]
+    assert repo.run("next", "--full", "--last", "2").returncode == 3
+    claimed = repo.j("next", "--claim")["data"]
+    assert claimed["claimed"] and claimed["task"]["header"]["claimed_by"]
+    assert "recent_log" in claimed["task"]
 
 
 def test_brief_effective_commits_without_git_walk(plain, repo):

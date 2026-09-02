@@ -75,7 +75,8 @@ refuses shallow clones rather than passing vacuously.
 python .ledger/ledger.py <command> [--json]
 
 next --claim      the agent entry point: highest-priority eligible task,
-                  claimed; explains WHY if nothing is eligible
+                  claimed, as a bounded digest (--full for show's shape);
+                  explains WHY if nothing is eligible
 add "title" -p p1 -s m --spec -      create a task (spec via stdin);
     [--after <id>] [--tag t]         --after = scheduler-visible dependency;
                                      warns (never refuses) on similar titles
