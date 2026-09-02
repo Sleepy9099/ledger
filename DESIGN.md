@@ -228,7 +228,12 @@ Commands: `init`, `add`, `list`, `show`, `next [--claim]`, `claim [--force]`,
 `validate [--coverage] [--strict] [--no-git]`, `doctor`, `search`,
 `report [--since|--until|--tag|--task|--actor|--no-git]` (operator
 diagnostics: every figure derived on each call from headers, Log lines and
-the trailer walk, nothing stored — §11's "rots" objection answered; the
+the trailer walk, nothing stored — §11's "rots" objection answered; with
+`--until`, claim holders, open HUMAN questions and closure are REPLAYED
+from the Log through the cutoff so the report shows that moment rather than
+today's headers (a hand-edited question is invisible to the replay — a
+labeled lower bound); `final_commit` is reported only when exactly one
+tip survives, else the candidates are listed; the
 "invites gaming" objection is accepted with eyes open: per-actor counters
 are agent-optimizable, so the command is kept out of PROTOCOL_TEXT and
 never feeds `next`, `done` or `validate`; `sources` labels lower bounds and

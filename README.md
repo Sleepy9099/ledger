@@ -157,7 +157,9 @@ else `git config user.name` — set the env once per session.
 a backlog window: tasks opened / done / dropped by priority (priority at
 creation replayed from `set:` lines), duplicates dropped (machine relation
 vs. a labeled prose heuristic), reproduction and duplicate ratios, blockers
-new / cleared, HUMAN questions created / answered / still open, dependency
+new / cleared, HUMAN questions created / answered / still open at the
+window's end (claims and questions are REPLAYED from the Log through
+`--until`, so a historical report shows that moment, not today), dependency
 edges added / removed, priorities raised / lowered, workers and per-actor
 counters (claims, takeovers, releases, done, notes, dead ends), active and
 stranded claims at the end of the window, claim-to-close durations

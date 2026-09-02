@@ -930,8 +930,8 @@ def test_report_counts_every_family(repo):
     assert r["dropped_duplicates"] == {"relation": 0, "prose_heuristic": 1}
     assert r["ratios"]["reproduction"] == 4.0
     assert r["blockers"] == {"new": 1, "cleared": 0}
-    assert r["questions"] == {"human_created": 2, "answered": 1,
-                              "human_open_end": 1}
+    assert r["questions"] == {"human_created": 2, "human_answered": 1,
+                              "answered_total": 1, "human_open_end": 1}
     assert r["dependencies"] == {"added": 3, "removed": 1}
     assert r["priority"] == {"raised": 1, "lowered": 0}
     assert r["agents"]["workers"] == ["orchestrator", "worker-a", "worker-b"]
@@ -1048,3 +1048,74 @@ def test_next_lists_are_bounded_and_full_is_not(repo):
     free = repo.add_task("Eligible", "-p", "p0")
     d = repo.j("next")["data"]
     assert d["task"]["header"]["id"] == free and "truncated" in d
+
+
+
+# --- report replays state at the window end (T-w7v7wk) -----------------------
+
+def _utc_now():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def test_report_replays_state_at_the_window_end(repo):
+    import time
+    tid = repo.add_task("Decision pending", "-p", "p1")
+    repo.j("claim", tid, "--session", "w")
+    repo.j("question", tid, "add", "which db?", "--human")
+    repo.j("question", tid, "add", "cache ttl?")
+    time.sleep(1.1)
+    cutoff = _utc_now()
+    time.sleep(1.1)
+    repo.j("question", tid, "resolve", "db", "--answer", "postgres",
+           "--session", "op")
+    repo.j("question", tid, "resolve", "ttl", "--answer", "60s")
+    repo.j("release", tid, "--session", "w")
+    then = repo.j("report", "--until", cutoff)["data"]
+    assert then["questions"] == {"human_created": 1, "human_answered": 0,
+                                 "answered_total": 0, "human_open_end": 1}
+    assert [a["claimed_by"] for a in then["agents"]["active_claims"]] == ["w"]
+    assert then["agents"]["stranded_claims"] == []
+    now = repo.j("report")["data"]
+    assert now["questions"] == {"human_created": 1, "human_answered": 1,
+                                "answered_total": 2, "human_open_end": 0}
+    assert now["agents"]["active_claims"] == []
+    assert "replay" in " ".join(now["sources"]["lower_bounds"])
+    # a takeover chain: the holder at the cutoff is the taker
+    t2 = repo.add_task("Taken over")
+    repo.j("claim", t2, "--session", "a")
+    repo.j("claim", t2, "--session", "b", "--force")
+    time.sleep(1.1)
+    cutoff2 = _utc_now()
+    time.sleep(1.1)
+    repo.j("done", t2, "--no-code", "x", "--session", "b")
+    then = repo.j("report", "--until", cutoff2, "--task", t2)["data"]
+    assert [a["claimed_by"] for a in then["agents"]["active_claims"]] == ["b"]
+    assert then["work"]["closed_done"] == {"p0": 0, "p1": 0, "p2": 0, "p3": 0}
+    now = repo.j("report", "--task", t2)["data"]
+    assert now["agents"]["active_claims"] == []
+    assert sum(now["work"]["closed_done"].values()) == 1
+
+
+def test_report_final_commit_only_when_unique(repo):
+    w = repo.add_task("Wave with two tips", "-p", "p1")
+    repo.j("claim", w, "--session", "orch")
+    repo.git("checkout", "-q", "-b", "tip-a")
+    (repo.root / "a.py").write_text("a\n", encoding="utf-8")
+    sha_a = repo.commit_all("Tip A", (f"Ledger-Task: {w}",))
+    repo.git("checkout", "-q", "main")
+    repo.git("checkout", "-q", "-b", "tip-b")
+    (repo.root / "b.py").write_text("b\n", encoding="utf-8")
+    sha_b = repo.commit_all("Tip B", (f"Ledger-Task: {w}",))
+    repo.git("checkout", "-q", "main")
+    repo.git("merge", "-q", "tip-a")
+    repo.git("merge", "-q", "--no-ff", "--no-commit", "tip-b")
+    repo.git("commit", "-q", "-m", "Integrate both tips")  # untrailered
+    d = repo.j("report", "--task", w)["data"]["commits"]
+    assert d["final_commit"] is None
+    assert set(d["final_commit_candidates"]) == {sha_a[:7], sha_b[:7]}
+    repo.j("link", w, "HEAD")  # the merge is now the unique tip
+    d = repo.j("report", "--task", w)["data"]["commits"]
+    merge_sha = repo.git("rev-parse", "HEAD").stdout.strip()[:7]
+    assert d["final_commit"] == merge_sha
+    assert d["final_commit_candidates"] == [merge_sha]

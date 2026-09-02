@@ -1,10 +1,12 @@
 ---
 id: T-w7v7wk
 title: report: replay state at the window end instead of reading current headers
-status: todo
+status: in_progress
 priority: p1
 size: m
 created: 2026-09-02T04:51:26Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T05:00:54Z
 tags: orchestration
 ---
 
@@ -29,3 +31,4 @@ cmd_report filters EVENTS by the window but derives human_open_end, active_claim
 ## Log
 
 - 2026-09-02T04:51:26Z [claude-2026-09-01-b] add: created: report: replay state at the window end instead of reading current headers [p1/m] (tags: orchestration)
+- 2026-09-02T05:00:54Z [claude-2026-09-01-b] claim: claimed

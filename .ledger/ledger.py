@@ -3695,6 +3695,48 @@ def _priority_at_creation(task: Task) -> str:
     return task.priority
 
 
+def _replay_state(task: Task, until: str | None) -> dict:
+    """Holder, closure, last activity and open HUMAN-question count AS OF
+    `until` (a UTC Z stamp), rebuilt from the Log alone: claim sets the
+    holder (a takeover is a claim line), release/done/drop clear it, block
+    retains it, unblock changes nothing; `question ... (HUMAN)` opens, an
+    `answer` of a 'HUMAN: ...' line closes. `until` None = now: the headers
+    are authoritative and cheaper, so they are used directly. A question
+    edited by hand is invisible to the replay — a labeled lower bound."""
+    if until is None:
+        return {"exists": True,
+                "holder": task.header.get("claimed_by"),
+                "claimed_at": task.header.get("claimed_at"),
+                "closed": task.status in ("done", "dropped"),
+                "last_activity": task.last_activity(),
+                "human_open": sum(1 for q in task.questions()
+                                  if q["human"] and not q["answered"])}
+    created = task.header.get("created", "")
+    if created and created > until:
+        return {"exists": False, "holder": None, "claimed_at": None,
+                "closed": False, "last_activity": created, "human_open": 0}
+    holder = claimed_at = None
+    closed, last, human_open = False, created, 0
+    for e in sorted(task.log(), key=lambda e: e["ts"]):
+        if e["ts"] > until:
+            break
+        last = max(last, e["ts"])
+        verb = e["verb"]
+        if verb == "claim":
+            holder, claimed_at = e["actor"], e["ts"]
+        elif verb == "release":
+            holder = claimed_at = None
+        elif verb in ("done", "done(no-code)", "drop"):
+            holder = claimed_at = None
+            closed = True
+        elif verb == "question" and e["text"].startswith("added (HUMAN)"):
+            human_open += 1
+        elif verb == "answer" and e["text"].startswith("'HUMAN: "):
+            human_open = max(0, human_open - 1)
+    return {"exists": True, "holder": holder, "claimed_at": claimed_at,
+            "closed": closed, "last_activity": last, "human_open": human_open}
+
+
 def cmd_report(args) -> int:
     ctx = make_ctx(args)  # read-only, lock-free
     use_git = not args.no_git and ctx.repo is not None
@@ -3760,15 +3802,19 @@ def cmd_report(args) -> int:
 
     # ---- Log-derived counters --------------------------------------------
     blockers = {"new": 0, "cleared": 0}
-    questions = {"human_created": 0, "answered": 0, "human_open_end": 0}
+    questions = {"human_created": 0, "human_answered": 0,
+                 "answered_total": 0, "human_open_end": 0}
     dependencies = {"added": 0, "removed": 0}
     priority = {"raised": 0, "lowered": 0}
     by_actor: dict[str, dict] = {}
     workers: set[str] = set()
+    # end-of-window state is REPLAYED through `until`, never read from
+    # today's headers (a historical report must show that moment)
+    states = {t.id: _replay_state(t, until) for t in population}
     for t in population:
-        if t.status in OPEN_STATUSES:
-            questions["human_open_end"] += sum(
-                1 for q in t.questions() if q["human"] and not q["answered"])
+        st = states[t.id]
+        if st["exists"] and not st["closed"]:
+            questions["human_open_end"] += st["human_open"]
         for e in events(t):
             verb, text, actor = e["verb"], e["text"], e["actor"]
             row = by_actor.setdefault(actor, {
@@ -3797,7 +3843,9 @@ def cmd_report(args) -> int:
             elif verb == "question" and text.startswith("added (HUMAN)"):
                 questions["human_created"] += 1
             elif verb == "answer":
-                questions["answered"] += 1
+                questions["answered_total"] += 1
+                if text.startswith("'HUMAN: "):
+                    questions["human_answered"] += 1
             elif verb == "add" and "(after: " in text:
                 dependencies["added"] += len(
                     id_token_pattern(ctx.prefix).findall(
@@ -3817,16 +3865,20 @@ def cmd_report(args) -> int:
 
     # ---- claims at the end of the window ---------------------------------
     stale_days = int(ctx.config.get("stale_claim_days", 7))
+    parent_closed = parent is not None and states[parent.id]["closed"]
+    ref_dt = parse_ts(until) if until else datetime.now(timezone.utc)
     active, stranded = [], []
     for t in population:
-        if not t.header.get("claimed_by"):
+        st = states[t.id]
+        if not st["exists"] or not st["holder"]:
             continue
-        row = {"id": t.id, "status": t.status,
-               "claimed_by": t.header.get("claimed_by"),
-               "claimed_at": t.header.get("claimed_at")}
-        if claim_is_stale_at(t, stale_days, until) or (
-                parent is not None and parent.status in ("done", "dropped")
-                and t.id != parent.id):
+        row = {"id": t.id,
+               "status": t.status if until is None else "open",
+               "claimed_by": st["holder"], "claimed_at": st["claimed_at"]}
+        last_dt = parse_ts(st["last_activity"])
+        stale = (last_dt is None or ref_dt is None
+                 or ref_dt - last_dt > timedelta(days=stale_days))
+        if stale or (parent_closed and t.id != parent.id):
             stranded.append(row)
         else:
             active.append(row)
@@ -3875,14 +3927,13 @@ def cmd_report(args) -> int:
                         if tid in pop_ids:
                             per_task[tid] = per_task.get(tid, 0) + 1
             done_in_pop = [t for t in population if t.status == "done"]
-            final_commit = None
+            tips: list[str] = []
             if parent is not None:
                 cands = list(dict.fromkeys(
                     [c["sha"] for c in parent.commits()]
                     + [c.sha7 for c in commits if parent.id in c.task_ids
                        or parent.id in explicit_link_tasks(c, explicit)]))
                 cands = [s for s in cands if git_sha_exists(ctx.repo, s)]
-                tips = []
                 for s in cands:
                     ancestor_of_other = any(
                         o != s and run_git(["merge-base", "--is-ancestor",
@@ -3890,7 +3941,9 @@ def cmd_report(args) -> int:
                         for o in cands)
                     if not ancestor_of_other:
                         tips.append(s)
-                final_commit = tips[0] if tips else None
+            # a final commit is only claimed when exactly one tip survives;
+            # incomparable tips are listed, never silently picked from
+            final_commit = tips[0] if len(tips) == 1 else None
             commits_block = {
                 **counts, "in_window": len(in_scope),
                 "tasks_per_linked_commit":
@@ -3899,6 +3952,7 @@ def cmd_report(args) -> int:
                     round(sum(per_task.get(t.id, 0) for t in done_in_pop)
                           / len(done_in_pop), 2) if done_in_pop else None,
                 "final_commit": final_commit,
+                "final_commit_candidates": tips,
             }
 
     data = {
@@ -3922,6 +3976,9 @@ def cmd_report(args) -> int:
                             "agents", "durations"],
             "git_derived": ["commits"] if commits_block is not None else [],
             "lower_bounds": [
+                "human_open_end / active_claims at a cutoff replay Log "
+                "lines through --until; questions or claims edited by hand "
+                "are invisible to the replay",
                 "dependencies.added counts add-line (after: ...) ids only "
                 "for tasks filed by a copy >= 1.2.0",
                 "work.opened priorities are replayed from set: lines",
@@ -3940,7 +3997,7 @@ def cmd_report(args) -> int:
         f"(+{prose_dups} prose)  reproduction {ratios['reproduction']}",
         f"  blockers new {blockers['new']} cleared {blockers['cleared']}  "
         f"human q created {questions['human_created']} answered "
-        f"{questions['answered']} open {questions['human_open_end']}",
+        f"{questions['human_answered']} open {questions['human_open_end']}",
         f"  deps +{dependencies['added']} -{dependencies['removed']}  "
         f"priority up {priority['raised']} down {priority['lowered']}",
         f"  workers {len(workers)}  active claims {len(active)}  stranded "
