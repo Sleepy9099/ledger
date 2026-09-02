@@ -1,12 +1,11 @@
 ---
 id: T-5z04ex
 title: Coverage repair: ledger link cannot fix a pushed untrailered commit
-status: in_progress
+status: done
 priority: p1
 size: s
 created: 2026-09-01T23:48:39Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T00:56:02Z
+closed: 2026-09-02T01:06:44Z
 tags: integrity, protocol
 ---
 
@@ -55,6 +54,8 @@ Recommendation: (b). Under (a) the only ways to green CI after a forgotten trail
 
 ## Commits
 
+- 0d6ac20 2026-09-01 Make explicit links count for coverage; diagnose multi-id trailer lines
+
 ## Log
 
 - 2026-09-01T23:48:39Z [claude-2026-09-01-a] add: created: Coverage repair: ledger link cannot fix a pushed untrailered commit
@@ -73,3 +74,5 @@ Recommendation: (b). Under (a) the only ways to green CI after a forgotten trail
 - 2026-09-02T01:06:27Z [claude-2026-09-01-b] step: checked 'Add the multi-id trailer-line diagnostic to validate_git and scan (message/hint only, no linkage)'
 - 2026-09-02T01:06:27Z [claude-2026-09-01-b] step: checked 'Tests in tests/test_git_integration.py per the spec; DESIGN §4 amended per the answer'
 - 2026-09-02T01:06:27Z [claude-2026-09-01-b] note: The discarded option-(a) hint wording nevertheless reached commit 88863da (T-71aehi) — the working tree was restored between checkout and that commit, cause unknown (OneDrive sync suspected). Replaced here by the option-(b) implementation; no functional effect in between.
+- 2026-09-02T01:06:44Z [claude-2026-09-01-b] link: 0d6ac20 Make explicit links count for coverage; diagnose multi-id trailer lines
+- 2026-09-02T01:06:44Z [claude-2026-09-01-b] done: evidence: 0d6ac20
