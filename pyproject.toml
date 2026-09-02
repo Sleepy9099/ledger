@@ -1,3 +1,31 @@
+# The primary channel is still the single file: copy .ledger/ledger.py into a
+# repo and run `python .ledger/ledger.py init`. This packaging shim only gives
+# humans a global `ledger` command (`pipx install git+https://github.com/
+# Sleepy9099/ledger`, `uvx --from git+https://github.com/Sleepy9099/ledger
+# ledger --version`). No runtime dependencies; the module IS the vendored file.
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ledger-agent-tasks"
+version = "1.2.0"
+description = "A task/spec ledger for AI coding agents on long-running projects: one stdlib-only Python file, one directory of Markdown task files, one validator."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = []
+
+[project.urls]
+Source = "https://github.com/Sleepy9099/ledger"
+
+[project.scripts]
+ledger = "ledger:main"
+
+[tool.setuptools]
+package-dir = {"" = ".ledger"}
+py-modules = ["ledger"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

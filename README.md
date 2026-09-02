@@ -42,6 +42,22 @@ def test_ledger_valid():
 CI needs full history (`fetch-depth: 0` on GitHub Actions) — `validate`
 refuses shallow clones rather than passing vacuously.
 
+### Optional: a global `ledger` command
+
+The single file stays the primary channel (it is what every host repo
+runs in CI). For a human who wants `ledger` on the PATH, the repo also
+packages that same file as a console script — no runtime dependencies:
+
+```bash
+pipx install git+https://github.com/Sleepy9099/ledger
+# or, without installing:
+uvx --from git+https://github.com/Sleepy9099/ledger ledger --version
+```
+
+Inside a host repo, `ledger doctor` then tells you whether the global copy
+and the vendored `.ledger/ledger.py` differ (`vendored-stale`); re-run
+`init` from whichever is newer.
+
 ## The model in 60 seconds
 
 - **One task = one file** at `.ledger/tasks/T-xxxxxx.md`: a strict `---`-fenced
