@@ -1,10 +1,12 @@
 ---
 id: T-9iu47b
 title: Wave-as-task convention: dependents lookup, list --depends-on, journaled add
-status: todo
+status: in_progress
 priority: p2
 size: s
 created: 2026-09-01T23:48:39Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T01:36:52Z
 tags: orchestration
 ---
 
@@ -46,10 +48,10 @@ Older copies parse, validate and schedule a wave task identically; they merely l
 
 ## Next Steps
 
-- [ ] task_full gains dependents (computed on read; show + next); show human line
-- [ ] list --depends-on <fragment>; add journals [prio/size] (after: ...) (tags: ...)
-- [ ] DESIGN §8 expansion + §11 cross-reference; README Daily commands rows for add --after/--tag and list --depends-on
-- [ ] Tests: dependents/depends-on, add Log line, end-to-end wave scenario in test_git_integration, op_add extension in test_property
+- [x] task_full gains dependents (computed on read; show + next); show human line
+- [x] list --depends-on <fragment>; add journals [prio/size] (after: ...) (tags: ...)
+- [x] DESIGN §8 expansion + §11 cross-reference; README Daily commands rows for add --after/--tag and list --depends-on
+- [x] Tests: dependents/depends-on, add Log line, end-to-end wave scenario in test_git_integration, op_add extension in test_property
 
 ## Open Questions
 
@@ -63,3 +65,8 @@ Older copies parse, validate and schedule a wave task identically; they merely l
 - 2026-09-01T23:48:42Z [claude-2026-09-01-a] step: added 'DESIGN §8 expansion + §11 cross-reference; README Daily commands rows for add --after/--tag and list --depends-on'
 - 2026-09-01T23:48:43Z [claude-2026-09-01-a] step: added 'Tests: dependents/depends-on, add Log line, end-to-end wave scenario in test_git_integration, op_add extension in test_property'
 - 2026-09-02T00:06:24Z [claude-2026-09-01-a] note: Completeness pass 2026-09-01: per-wave `wave:<slug>` tag on members and mid-wave discovered work (depends_on cannot hold discovered work without gating the wave's close); parked-wave note re stale-block aging
+- 2026-09-02T01:36:52Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T01:43:00Z [claude-2026-09-01-b] step: checked 'task_full gains dependents (computed on read; show + next); show human line'
+- 2026-09-02T01:43:00Z [claude-2026-09-01-b] step: checked 'list --depends-on <fragment>; add journals [prio/size] (after: ...) (tags: ...)'
+- 2026-09-02T01:43:00Z [claude-2026-09-01-b] step: checked 'DESIGN §8 expansion + §11 cross-reference; README Daily commands rows for add --after/--tag and list --depends-on'
+- 2026-09-02T01:43:01Z [claude-2026-09-01-b] step: checked 'Tests: dependents/depends-on, add Log line, end-to-end wave scenario in test_git_integration, op_add extension in test_property'

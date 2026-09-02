@@ -371,7 +371,33 @@ reduces to git's per-line merge on one small Markdown file.
   total orders rot under merges; fine-grained sequencing is the depends_on DAG.
 - **Dependencies:** flat `depends_on` on the dependent side only (AND
   semantics, acyclic, enforced at write AND validate time). No epics: a big
-  task is split into peers the parent depends_on.
+  task is split into peers the parent depends_on. The reverse edge is
+  computed on read (`show` → `dependents`, `list --depends-on <id>`), never
+  stored.
+- **Waves are tasks** (the §11 cut applied, not reversed): a multi-agent
+  wave is an ordinary task `add "Wave N: <objective>" -p p1 -s s --tag wave
+  --tag wave:<slug> --after <m1> --after <m2> ...`. The orchestrator's
+  `claim W` is the "wave open" marker (the `claim:` Log line records who
+  and when, since `done` strips the claim fields) and hides W from
+  workers' `next --claim`; `next` offers W only once every member is done
+  and names each unmet member; `done W --commit <integration sha>` closes
+  it (the merge commit carrying `Ledger-Task: W` in its final paragraph is
+  the natural close) and warns if members are still open; `note W` works
+  after close for the wave record (suite result, worker count, anomalies).
+  The add Log line journals the selected set (`created: ... [p1/s] (after:
+  T-a, T-b) (tags: ...)`), later `set: depends_on - -> T-x` lines record
+  removals, so the selection needs no second file. Members and work
+  discovered mid-wave carry `wave:<slug>` (discovered work must NOT join
+  W's depends_on, which would gate the wave's own close); `list --tag
+  wave:<slug>` is the population, `list --depends-on <m> --tag wave` answers
+  "which wave was T-x in". Only the orchestrator writes W's header (a
+  worker that drops a member notes it on the member and ignores drop's
+  `--remove-depends` hint; the orchestrator applies it) — one writer per
+  header line (§7(d)). At orchestrator session end while the wave is open,
+  keep the claim or park it with `release W --blocked --on "external: wave
+  open"`; never plain-`release` it (it would become claimable). Any future
+  wave-specific TOOL surface — a field, status, command, directory or
+  metric — is a §11 reversal to be routed through a human question.
 
 ## 9. Agent protocol
 
@@ -412,7 +438,8 @@ Archive directories (rename/edit conflicts), global NDJSON event logs
 (every-merge conflict magnet), index/counter files, lock files as state (the
 §7(g) mutex holds none) and daemons, git hooks
 (don't survive clone; CI validate is the layer), `merge=union` drivers,
-epics/sprints/due-dates/velocity (PM features that rot and invite gaming),
+epics/sprints/due-dates/velocity (PM features that rot and invite gaming;
+a wave is an ordinary task whose depends_on lists its members — §8),
 evidence-token vocabularies (commits carry their tests), an `updated` field,
 inferred commit linkage (fabricated evidence), YAML/TOML parsing (dependency
 or 3.11+ / write-less; the strict subset is ~50 lines and merges better), and

@@ -1082,11 +1082,22 @@ def task_brief(task: Task) -> dict:
     }
 
 
-def task_full(ctx: Ctx, task: Task, trailer_map: dict | None = None) -> dict:
+def dependents_of(task: Task, all_tasks: list) -> list[str]:
+    """Every task (any status) whose depends_on names this one — the reverse
+    edge, computed on read, never stored. A wave is a task whose depends_on
+    lists its members, so this answers "which wave was T-x in"."""
+    return [t.id for t in sorted(all_tasks, key=sort_key)
+            if task.id in t.depends_on]
+
+
+def task_full(ctx: Ctx, task: Task, trailer_map: dict | None = None,
+              all_tasks: list | None = None) -> dict:
     section_shas = [c["sha"] for c in task.commits()]
     trailer_shas = (trailer_map or {}).get(task.id, [])
     effective = list(dict.fromkeys(
         section_shas + [s[:7] for s in trailer_shas]))
+    if all_tasks is None:
+        all_tasks, _ = load_all_tasks(ctx)
     return {
         "header": {k: task.header.get(k) for k in HEADER_ORDER
                    if k in task.header},
@@ -1097,6 +1108,7 @@ def task_full(ctx: Ctx, task: Task, trailer_map: dict | None = None) -> dict:
         "log": task.log(),
         "effective_commits": effective,
         "closed_relation": task.closed_relation(),
+        "dependents": dependents_of(task, all_tasks),
         "last_activity": task.last_activity(),
         "path": str(task.path) if task.path else None,
     }
@@ -1457,7 +1469,15 @@ def cmd_add(args) -> int:
         task.header["tags"] = ", ".join(dict.fromkeys(
             _clean_tag(t) for t in args.tag))
 
-    task.append_log(ctx.actor, "add", f"created: {task.title}")
+    # journal the initial selection: the `created:` prefix stays so old and
+    # new corpora read uniformly; the suffixes make the add line the durable
+    # record of a wave's selected members and tags
+    created = f"created: {task.title} [{task.priority}/{task.size}]"
+    if deps:
+        created += f" (after: {task.header['depends_on']})"
+    if task.header.get("tags"):
+        created += f" (tags: {task.header['tags']})"
+    task.append_log(ctx.actor, "add", created)
     task.path = task_path(ctx, task.id)
     save_task(task)
     # duplicates are cheapest to catch at filing time, and `add` is the one
@@ -1477,6 +1497,9 @@ def cmd_add(args) -> int:
 def cmd_list(args) -> int:
     ctx = make_ctx(args)
     tasks, problems = load_all_tasks(ctx)
+    depends_on = None
+    if getattr(args, "depends_on", None):
+        depends_on = load_task_or_die(ctx, args.depends_on).id
     rows = []
     for task in sorted(tasks, key=sort_key):
         if args.status and task.status not in args.status:
@@ -1484,6 +1507,8 @@ def cmd_list(args) -> int:
         if args.priority and task.priority not in args.priority:
             continue
         if args.tag and args.tag not in task.tags:
+            continue
+        if depends_on and depends_on not in task.depends_on:
             continue
         if args.claimed and not task.header.get("claimed_by"):
             continue
@@ -1511,12 +1536,13 @@ def cmd_list(args) -> int:
 def cmd_show(args) -> int:
     ctx = make_ctx(args)
     task = load_task_or_die(ctx, args.id, for_write=False)
-    data = task_full(ctx, task, trailer_links(ctx))
     all_tasks, _ = load_all_tasks(ctx)
+    data = task_full(ctx, task, trailer_links(ctx), all_tasks)
     data["absorbed"] = absorbed_by(task, all_tasks)
     human = [serialize_task(task).rstrip("\n"), "",
              f"# last_activity: {data['last_activity']}",
-             f"# effective_commits: {', '.join(data['effective_commits']) or '(none)'}"]
+             f"# effective_commits: {', '.join(data['effective_commits']) or '(none)'}",
+             f"# dependents: {', '.join(data['dependents']) or '(none)'}"]
     if data["absorbed"]:
         human.append("# absorbed: " + ", ".join(
             f"{a['id']} ({a['kind']})" for a in data["absorbed"]))
@@ -1559,7 +1585,8 @@ def cmd_next(args) -> int:
         apply_claim(top, ctx.actor, takeover)
         save_task(top)
         claimed = True
-    data = {"task": task_full(ctx, top, trailer_links(ctx)), "claimed": claimed,
+    data = {"task": task_full(ctx, top, trailer_links(ctx), tasks),
+            "claimed": claimed,
             "stale_takeover": flag == "stale_claim",
             "why": why, "blocked_on_human": human_blocked,
             "stale_blocks": stale_blocks}
@@ -2923,6 +2950,9 @@ def build_parser() -> Parser:
     p.add_argument("--status", action="append", choices=STATUSES)
     p.add_argument("--priority", action="append", choices=PRIORITIES)
     p.add_argument("--tag")
+    p.add_argument("--depends-on", metavar="ID",
+                   help="only tasks whose depends_on names this task "
+                        "(reverse lookup: which wave was T-x in?)")
     p.add_argument("--claimed", action="store_true")
     p.add_argument("--unclaimed", action="store_true")
     p.set_defaults(fn=cmd_list)

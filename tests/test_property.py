@@ -11,10 +11,15 @@ def test_random_cli_sequences_never_corrupt(plain):
         return rng.choice(ids)
 
     def op_add():
+        extra = []
+        if ids and rng.random() < 0.3:
+            extra += ["--after", any_id()]
+        if rng.random() < 0.3:
+            extra += ["--tag", rng.choice(["wave", "wave:w1", "resource:gpu"])]
         tid = plain.add_task(
             f"Task {rng.randrange(10_000)}",
             "-p", rng.choice(["p0", "p1", "p2", "p3"]),
-            "-s", rng.choice(["xs", "s", "m", "l", "xl"]))
+            "-s", rng.choice(["xs", "s", "m", "l", "xl"]), *extra)
         ids.append(tid)
 
     def op_note():

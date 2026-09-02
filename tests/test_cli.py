@@ -49,6 +49,8 @@ def test_add_show_shapes(repo):
     assert show["header"]["tags"] == "alpha"
     assert show["log"][0]["verb"] == "add"
     assert show["log"][0]["actor"] == "test-session"
+    assert show["log"][0]["text"] == "created: First task [p1/s] (tags: alpha)"
+    assert show["dependents"] == []
 
 
 def test_add_spec_from_stdin_and_after(repo):
@@ -59,6 +61,9 @@ def test_add_spec_from_stdin_and_after(repo):
     show = repo.j("show", child)["data"]
     assert show["spec"] == "Line one.\nLine two."
     assert show["header"]["depends_on"] == dep
+    assert show["log"][0]["text"] == f"created: Child [p2/m] (after: {dep})"
+    plain = repo.add_task("Plain")
+    assert repo.j("show", plain)["data"]["log"][0]["text"] == "created: Plain [p2/m]"
 
 
 def test_list_filters_and_sort(repo):
@@ -574,8 +579,8 @@ def test_add_similarity_is_capped_and_best_first(repo):
 
 
 def test_scan_reports_similar_open_pairs(repo):
-    a = repo.add_task("Retry with backoff for the sync client")
-    b = repo.add_task("Sync client retry backoff")
+    a = repo.add_task("Retry with backoff for the sync client", "-p", "p1")
+    b = repo.add_task("Sync client retry backoff")  # p2: pins the pair order
     repo.add_task("Unrelated docs cleanup")
     d = repo.j("scan")["data"]
     assert d["similar_open_pairs"] == [{"a": a, "b": b, "score": 1.0}]
@@ -589,3 +594,26 @@ def test_title_tokens(ledger_mod):
         "retry", "backoff", "sync", "client"}
     assert ledger_mod.title_tokens("Fix it") == set()
     assert ledger_mod.title_tokens("Task 1234") == {"task", "1234"}
+
+
+
+# --- dependents and list --depends-on (T-9iu47b) ----------------------------
+
+def test_dependents_and_list_depends_on(repo):
+    m = repo.add_task("Member", "-p", "p0")  # priorities pin every order below
+    other = repo.add_task("Other member")
+    w = repo.j("add", "Wave 1", "-p", "p1", "--tag", "wave", "--after", m,
+               "--after", other)["data"]["id"]
+    child = repo.j("add", "Follow-up", "--after", m)["data"]["id"]  # p2
+    assert repo.j("show", m)["data"]["dependents"] == [w, child]
+    assert repo.j("next")["data"]["task"]["dependents"] == [w, child]
+    rows = repo.j("list", "--depends-on", m)["data"]["tasks"]
+    assert [t["id"] for t in rows] == [w, child]
+    rows = repo.j("list", "--depends-on", m, "--tag", "wave")["data"]["tasks"]
+    assert [t["id"] for t in rows] == [w]
+    repo.j("done", w, "--no-code", "stamped", "--force")
+    assert w in repo.j("show", m)["data"]["dependents"]  # any status
+    assert repo.j("list", "--depends-on", "zzzzzz", expect=2)["errors"][0][
+        "code"] == "no-such-task"
+    assert repo.j("list", "--depends-on", "T-", expect=2)["errors"][0][
+        "code"] == "ambiguous-id"

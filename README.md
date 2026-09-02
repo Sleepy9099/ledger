@@ -79,7 +79,9 @@ next --claim      the agent entry point: highest-priority eligible task,
 add "title" -p p1 -s m --spec -      create a task (spec via stdin);
     [--after <id>] [--tag t]         --after = scheduler-visible dependency;
                                      warns (never refuses) on similar titles
-show <id> | list [--status ...]      read state (any unique id fragment works)
+show <id> | list [--status ...]      read state (any unique id fragment works;
+list --depends-on <id> [--tag wave]  show carries dependents; this is the
+                                     reverse lookup, e.g. which wave held T-x)
 set <id> --priority|--size|--title   edit header fields; --add-depends /
     |--add-depends|--remove-depends  --remove-depends keep the DAG honest
 note <id> "text" [--dead-end]        append a Log breadcrumb (--dead-end

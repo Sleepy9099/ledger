@@ -353,3 +353,51 @@ def test_deleting_a_dead_end_note_is_tampering(repo):
     rc, payload = validate(repo, "--coverage")
     assert any(e["code"] == "log-tamper" and e["task"] == tid
                for e in payload["errors"]), payload["errors"]
+
+
+
+def test_wave_as_task_end_to_end(repo):
+    """The wave convention (DESIGN §8): members + a wave task, orchestrator
+    claim, trailered member commits, an integration merge carrying the wave
+    trailer, done --commit HEAD, strict validate clean, scan links the
+    merge, and both reverse lookups answer."""
+    m1 = repo.add_task("Member one", "--tag", "wave:w1")
+    m2 = repo.add_task("Member two", "--tag", "wave:w1")
+    w = repo.j("add", "Wave 1: ship the parser", "-p", "p1", "-s", "s",
+               "--tag", "wave", "--tag", "wave:w1", "--after", m1,
+               "--after", m2)["data"]["id"]
+    repo.j("claim", w, "--session", "orchestrator")  # wave open
+    for m, name in ((m1, "one"), (m2, "two")):
+        repo.j("claim", m, "--session", f"worker-{name}")
+        (repo.root / f"{name}.py").write_text("x\n", encoding="utf-8")
+        repo.commit_all(f"Implement member {name}", (f"Ledger-Task: {m}",))
+        repo.j("done", m, "--session", f"worker-{name}")
+    # a worker's next never sees the open wave: the orchestrator holds it
+    n = repo.j("next", "--session", "worker-three")["data"]
+    assert n["task"] is None
+    assert any(x["id"] == w and "claimed by orchestrator" in
+               x["ineligible_because"] for x in n["why"])
+    repo.git("checkout", "-q", "-b", "integration")
+    (repo.root / "glue.py").write_text("g\n", encoding="utf-8")
+    repo.commit_all("Wire members together", (f"Ledger-Task: {w}",))
+    repo.git("checkout", "-q", "main")
+    repo.git("merge", "-q", "--no-ff", "--no-commit", "integration")
+    repo.git("commit", "-q", "-m", "Integrate wave 1", "-m",
+             f"Ledger-Task: {w}")
+    merge_sha = repo.git("rev-parse", "HEAD").stdout.strip()
+    d = repo.j("done", w, "--commit", "HEAD", "--session", "orchestrator")
+    assert d["ok"]
+    assert not any("depends_on" in e["message"] for e in d["errors"])
+    repo.j("note", w, "suite: green; workers: 2; anomalies: none",
+           "--session", "orchestrator")  # the wave record, after close
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]
+    scan = repo.j("scan")["data"]
+    assert any(x["sha"] == merge_sha[:7] and x["task"] == w
+               for x in scan["linked"])
+    assert repo.j("show", m1)["data"]["dependents"] == [w]
+    rows = repo.j("list", "--depends-on", m1, "--tag", "wave")["data"]["tasks"]
+    assert [t["id"] for t in rows] == [w]
+    population = {t["id"] for t in repo.j("list", "--tag", "wave:w1")[
+        "data"]["tasks"]}
+    assert population == {m1, m2, w}
