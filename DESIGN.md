@@ -392,6 +392,9 @@ no Log activity for `stale_claim_days`: it carries no claim, so only its Log
 can age it; scoped to the `external: ready` prefix so parked blocks such as
 `external: wave open` are never caught, and a `note` refreshes it —
 repairable by `done` / `release` / `unblock`), `xl-open`,
+`state-coherence` also rejects an open status that carries a closing Log
+line (the documented "latest Log event wins" conflict rule could re-open a
+closed task silently; closed is terminal — `ledger repair`),
 `checkbox-grammar` (near-miss checkbox lines that would silently escape the
 steps/questions machinery — and the HUMAN done gate), `done-loose-ends`
 (steps / questions; the still-open-`depends_on` form is emitted by `done`
@@ -409,8 +412,10 @@ replacement in the same run, otherwise naming same-subject candidates for
 `ledger link`), `linked-never-claimed` (a trailer against a still-OPEN task with no claim
 Log evidence at all — a released task is NOT flagged because its claim line
 survives, and a closed task is NOT flagged because it cannot be claimed
-retroactively and its closing Log line records engagement); with
-`--coverage` additionally `log-tamper` — the append-only Log verified
+retroactively and its closing Log line records engagement). Errors with
+`--coverage` additionally include `log-tamper` (promoted from warning on
+2026-09-02: it is a git-verified fact, and the documented post-merge
+ritual runs without `--strict`) — the append-only Log verified
 **historically**: every commit in scope is checked parent→commit (merge
 commits against each parent), so once a Log event enters repository history
 no later state may remove or alter it, task-file deletions included, and a
@@ -418,8 +423,14 @@ HEAD→working-tree pass catches uncommitted tampering before the session's
 final commit. A net baseline→now diff could not see add-then-delete
 sequences; the per-commit walk can. All scans pin git config
 (`diff.noprefix`/`mnemonicPrefix`/`external`, `core.quotePath`) so user
-settings cannot silently blind them. Info (never promoted, `--coverage`
-only): `exempt-ratio` — escape-hatch abuse stays visible.
+settings cannot silently blind them; every git failure inside the tamper
+pass, an unreadable clone depth, or a tasks directory outside the
+repository is itself reported rather than silently skipped (coverage never
+passes on a guess), and a task file git treats as binary is a violation
+because its patch cannot be read. Info (never promoted): `exempt-ratio`
+(`--coverage` only) — escape-hatch abuse stays visible — and
+`resource-contention` (a sanctioned `--force` double-hold must not fail
+CI).
 
 All offline checks also run with `--no-git` for exported trees.
 

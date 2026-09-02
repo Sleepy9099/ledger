@@ -1,10 +1,12 @@
 ---
 id: T-14fv7g
 title: Validate integrity bundle: closing-line vs open status, log-tamper at error tier, fail-closed shallow and tamper passes, hunk-aware diff parser
-status: todo
+status: in_progress
 priority: p1
 size: s
 created: 2026-09-02T11:44:57Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T11:53:18Z
 tags: integrity
 ---
 
@@ -28,3 +30,4 @@ Tests for each.
 ## Log
 
 - 2026-09-02T11:44:57Z [claude-2026-09-01-b] add: created: Validate integrity bundle: closing-line vs open status, log-tamper at error tier, fail-closed shallow and tamper passes, hunk-aware diff parser [p1/s] (tags: integrity)
+- 2026-09-02T11:53:18Z [claude-2026-09-01-b] claim: claimed

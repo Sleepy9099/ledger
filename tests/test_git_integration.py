@@ -227,6 +227,7 @@ def test_log_tamper_detected(repo):
     rc, payload = validate(repo, "--coverage")
     tamper = [e for e in payload["errors"] if e["code"] == "log-tamper"]
     assert tamper and tamper[0]["task"] == tid
+    assert rc == 1 and tamper[0]["severity"] == "error"  # git-verified fact
 
 
 def test_empty_repo_init_and_first_commits(tmp_path, base_env):

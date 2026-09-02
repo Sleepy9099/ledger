@@ -527,3 +527,21 @@ def test_control_bytes_are_stripped_flagged_and_never_hide_tampering(
     tamper = [e for e in payload["errors"] if e["code"] == "log-tamper"
               and e["task"] == tid]
     assert tamper and "binary" in tamper[0]["message"]
+
+
+
+def test_tamper_parser_is_hunk_aware(repo):
+    """A prose line beginning with `-- ` that gets removed looks like a diff
+    header to a naive parser; the Log deletion in the same commit must
+    still be attributed to the file."""
+    tid = repo.j("add", "SQL notes", "--spec", "-",
+                 input="-- a comment line\nreal spec\n")["data"]["id"]
+    repo.j("note", tid, "keep me")
+    repo.commit_all("Track sql task")
+    text = repo.read(tid).replace("-- a comment line\n", "")
+    text = "\n".join(l for l in text.split("\n") if "keep me" not in l)
+    repo.write(tid, text)
+    rc, payload = validate(repo, "--coverage")
+    tamper = [e for e in payload["errors"] if e["code"] == "log-tamper"
+              and e["task"] == tid]
+    assert tamper and "1 Log line(s) deleted" in tamper[0]["message"]

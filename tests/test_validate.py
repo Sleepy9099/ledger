@@ -282,3 +282,35 @@ def test_step_outcome_suffix_is_free_text_and_strict_clean(repo):
                                            "- [~] measure it"))
     rc, payload = validate(repo, "--no-git", "--strict", expect=1)
     assert "checkbox-grammar" in codes(payload, "error")
+
+
+
+def test_closing_log_line_with_open_status_is_incoherent(repo):
+    """The documented header-conflict rule can re-open a closed task; the
+    file must not validate clean (sweep 2026-09-02, task C)."""
+    tid = repo.add_task("Closed then merged open")
+    repo.j("done", tid, "--no-code", "shipped")
+    text = repo.read(tid).replace("status: done\n", "status: in_progress\n"
+                                  ).replace("closed: ", "claimed_by: b\nclaimed_at: ")
+    repo.write(tid, text)
+    rc, payload = validate(repo, "--no-git", expect=1)
+    sc = [e for e in payload["errors"] if e["code"] == "state-coherence"
+          and "closing Log line" in e["message"]]
+    assert sc and "ledger repair" in sc[0]["fix_hint"]
+
+
+def test_shallow_detection_fails_closed(ledger_mod, repo, monkeypatch):
+    monkeypatch.chdir(repo.root)
+    real = ledger_mod.run_git
+
+    def broken(args, cwd):
+        if "--is-shallow-repository" in args or "--git-dir" in args:
+            return 128, ""
+        return real(args, cwd)
+    monkeypatch.setattr(ledger_mod, "run_git", broken)
+    args = ledger_mod.build_parser().parse_args(["validate", "--coverage",
+                                                 "--json", "--session", "t"])
+    ctx = ledger_mod.make_ctx(args)
+    violations = ledger_mod.validate_git(ctx, coverage=True)
+    assert any(e["code"] == "coverage" and "cannot determine" in e["message"]
+               for e in violations)

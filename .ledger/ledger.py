@@ -141,7 +141,7 @@ VALIDATION_CODES = {
     "unknown-key": "warning",
     "sha-unreachable": "warning",   # git
     "linked-never-claimed": "warning",  # git
-    "log-tamper": "warning",        # git, --coverage only
+    "log-tamper": "error",          # git, --coverage only; git-verified
     "exempt-ratio": "info",         # git, --coverage only; never promoted
     "resource-contention": "info",  # two fresh claims lease one resource; never promoted
 }
@@ -694,9 +694,17 @@ def is_reachable(index: dict[str, list[str]], sha: str) -> bool:
     return any(full.startswith(sha) for full in index.get(sha[:7], ()))
 
 
-def git_is_shallow(repo: Path) -> bool:
+def git_is_shallow(repo: Path) -> bool | None:
+    """True/False, or None when git cannot say (old git, broken .git):
+    callers must fail closed on None — coverage never passes on a guess."""
     rc, out = run_git(["rev-parse", "--is-shallow-repository"], repo)
-    return rc == 0 and out == "true"
+    if rc == 0 and out in ("true", "false"):
+        return out == "true"
+    rc2, gitdir = run_git(["rev-parse", "--git-dir"], repo)
+    if rc2 == 0 and gitdir:
+        return (Path(gitdir) if Path(gitdir).is_absolute()
+                else repo / gitdir).joinpath("shallow").exists()
+    return None
 
 
 @dataclasses.dataclass
@@ -2958,7 +2966,7 @@ def cmd_scan(args) -> int:
         else:
             unlinked.append({"sha": c.sha7, "subject": c.subject})
     backfilled, pruned, prune_refused = [], [], []
-    if prune and git_is_shallow(repo):
+    if prune and git_is_shallow(repo) is not False:  # None fails closed
         raise LedgerError(
             "coverage", "shallow clone — prune cannot see which commits are "
             "reachable and would delete evidence", fix_hint="fetch full "
@@ -3458,7 +3466,21 @@ def validate_offline(ctx: Ctx) -> list[dict]:
         if status not in ("done", "dropped") and task.header.get("closed"):
             violations.append(err("state-coherence",
                                   f"{status} task carries a closed timestamp",
-                                  task=tid))
+                                  task=tid,
+                                  fix_hint="ledger repair <id> derives the "
+                                           "coherent header from the Log"))
+        if status not in ("done", "dropped") and any(
+                e["verb"] in ("done", "done(no-code)", "drop")
+                for e in task.log()):
+            # the documented header-conflict rule ("latest Log event wins")
+            # can re-open a closed task silently; closed is terminal
+            violations.append(err(
+                "state-coherence",
+                f"{status} task carries a closing Log line (done/drop) — "
+                "closed is terminal", task=tid,
+                fix_hint="a merge or hand edit re-opened it: restore the "
+                         "closed header (ledger repair <id>); if the close "
+                         "itself was wrong, the redo is a new task"))
         if status == "done":
             has_commits = bool(task.commits())
             has_nocode = any(e["verb"] == "done(no-code)" for e in task.log())
@@ -3561,9 +3583,11 @@ def _tamper_violations(patch: str, where: str, violations: list[dict]) -> None:
     current_new: str | None = None
     current_old: str | None = None
     diff_file = ""
+    in_hunk = False  # `--- `/`+++ ` are headers only before the first @@
     for line in patch.split("\n"):
         if line.startswith("diff --git"):
             current_new = current_old = None
+            in_hunk = False
             diff_file = line[len("diff --git a/"):].split(" b/", 1)[0]
         elif line.startswith("Binary files"):
             # a binary task file hides its patch: nothing can be verified,
@@ -3572,16 +3596,18 @@ def _tamper_violations(patch: str, where: str, violations: list[dict]) -> None:
                 "log-tamper",
                 f"{Path(diff_file).name}: file is binary (control bytes) "
                 f"{where} — Log lines cannot be verified",
-                task=Path(diff_file).stem, severity="warning",
+                task=Path(diff_file).stem,
                 fix_hint="remove control bytes from the file; ledger "
                          "validate names them (encoding)"))
-        elif line.startswith("--- a/"):
+        elif line.startswith("@@"):
+            in_hunk = True
+        elif not in_hunk and line.startswith("--- a/"):
             current_old = line[6:]
-        elif line.startswith("--- "):
+        elif not in_hunk and line.startswith("--- "):
             current_old = None  # /dev/null: file created in this diff
-        elif line.startswith("+++ b/"):
+        elif not in_hunk and line.startswith("+++ b/"):
             current_new = line[6:]
-        elif line.startswith("+++ "):
+        elif not in_hunk and line.startswith("+++ "):
             current_new = None  # /dev/null: file deleted in this diff
             if current_old and current_old.endswith(".md"):
                 deleted_files.append(current_old)
@@ -3597,7 +3623,7 @@ def _tamper_violations(patch: str, where: str, violations: list[dict]) -> None:
     for fname in deleted_files:
         violations.append(err(
             "log-tamper", f"task file {Path(fname).name} deleted {where}",
-            task=Path(fname).stem, severity="warning",
+            task=Path(fname).stem,
             fix_hint="task files are never deleted (use ledger drop); "
                      "restore it from git history"))
     for fname, lines in removed.items():
@@ -3608,7 +3634,7 @@ def _tamper_violations(patch: str, where: str, violations: list[dict]) -> None:
             violations.append(err(
                 "log-tamper",
                 f"{Path(fname).name}: {len(gone)} Log line(s) deleted {where}",
-                task=Path(fname).stem, severity="warning",
+                task=Path(fname).stem,
                 fix_hint="Log is append-only; restore the lines from git "
                          "history"))
 
@@ -3686,12 +3712,21 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
     known = {t.id for t in tasks}
     by_id = {t.id: t for t in tasks}
 
-    if coverage and git_is_shallow(repo):
-        violations.append(err(
-            "coverage",
-            "shallow clone — coverage would pass vacuously, refusing",
-            fix_hint="fetch full history (fetch-depth: 0 in CI)"))
-        return violations
+    if coverage:
+        shallow = git_is_shallow(repo)
+        if shallow is None:
+            violations.append(err(
+                "coverage", "cannot determine whether this clone is shallow "
+                "— refusing rather than guessing",
+                fix_hint="git >= 2.15 with a readable .git; fetch full "
+                         "history (fetch-depth: 0 in CI)"))
+            return violations
+        if shallow:
+            violations.append(err(
+                "coverage",
+                "shallow clone — coverage would pass vacuously, refusing",
+                fix_hint="fetch full history (fetch-depth: 0 in CI)"))
+            return violations
 
     # sha-unreachable: commit-cache lines not reachable from HEAD. Asked of
     # HEAD's ancestry (one rev-list), never of the local object store, so the
@@ -3811,19 +3846,32 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
     try:
         tasks_rel = ctx.tasks_dir.resolve().relative_to(repo.resolve()).as_posix()
     except ValueError:
-        return violations  # ledger dir outside the repo: skip log-tamper
+        violations.append(err(
+            "log-tamper", "the tasks directory is not inside the repository "
+            "(symlink, junction or subst drive?) — the append-only Log "
+            "could not be verified",
+            fix_hint="run from the real checkout path"))
+        return violations
     diff_cfg = ["-c", "diff.noprefix=false", "-c", "diff.mnemonicPrefix=false",
                 "-c", "core.quotePath=false"]
     rc, out = run_git([*diff_cfg, "diff", "--no-ext-diff", "--no-renames",
                        "HEAD", "--", tasks_rel], repo)
-    if rc == 0 and out:
+    if rc != 0:
+        violations.append(err("log-tamper", "git diff HEAD failed — the "
+                              "uncommitted Log changes could not be verified",
+                              fix_hint="fix the git error and re-run"))
+    elif out:
         _tamper_violations(out, "(uncommitted)", violations)
     baseline = ctx.config.get("baseline")
     range_spec = f"{baseline}..HEAD" if baseline else "HEAD"
     rc, out = run_git([*diff_cfg, "log", "--no-show-signature", "--no-renames",
                        "--format=%x01%H", "-p", range_spec, "--", tasks_rel],
                       repo)
-    if rc == 0 and out:
+    if rc != 0:
+        violations.append(err("log-tamper", f"git log -p {range_spec} failed "
+                              "— the Log history could not be verified",
+                              fix_hint="fix the git error and re-run"))
+    elif out:
         for record in out.split("\x01"):
             if not record.strip():
                 continue
@@ -3836,7 +3884,12 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
                 rc, out = run_git([*diff_cfg, "diff", "--no-ext-diff",
                                    "--no-renames", parent, c.sha, "--",
                                    tasks_rel], repo)
-                if rc == 0 and out:
+                if rc != 0:
+                    violations.append(err(
+                        "log-tamper", f"git diff for merge {c.sha7} failed — "
+                        "its Log resolution could not be verified",
+                        fix_hint="fix the git error and re-run"))
+                elif out:
                     _tamper_violations(
                         out, f"in merge {c.sha7} (vs parent {parent[:7]})",
                         violations)
