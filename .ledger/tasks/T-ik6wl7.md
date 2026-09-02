@@ -1,10 +1,12 @@
 ---
 id: T-ik6wl7
 title: Decide: first-class ready status and stranded-handoff aging
-status: todo
+status: in_progress
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T02:52:02Z
 tags: lifecycle, decision
 ---
 
@@ -28,9 +30,9 @@ T-fkywmw (claim nonce — different mechanism, same defer-until-observed stance)
 
 ## Next Steps
 
-- [ ] Human answers both questions; unblock or drop
-- [ ] If a ready status is approved: implement per the verified design below and note T-2e587s about SCHEMA_VERSION 2
-- [ ] If stranded-handoff aging is approved: add the stale-block warning + lockstep fixture
+- [x] Human answers both questions; unblock or drop
+- [x] If a ready status is approved: implement per the verified design below and note T-2e587s about SCHEMA_VERSION 2
+- [x] If stranded-handoff aging is approved: add the stale-block warning + lockstep fixture
 
 ## Open Questions
 
@@ -52,3 +54,8 @@ T-fkywmw (claim nonce — different mechanism, same defer-until-observed stance)
 - 2026-09-02T00:54:58Z [claude-2026-09-01-b] answer: 'HUMAN: Add a sixth status `ready` (`ledger ready <id>`) as the review's #1 recommendation, reversing DESIGN decision #6, or keep it cut because `release --blocked --on "external: ready for integration"` already yields the handoff state (documented by the protocol-refresh task)? Recommendation: keep it cut until a second wave shows the convention insufficient; the verified enum design is recorded in this spec for that case.' -> Keep the ready status cut. Operator criteria: a schema bump forces every vendored copy to upgrade and opens a silent-takeover window on old copies; release --blocked --on 'external: ready for integration' gives the same state with zero schema change and is documented by T-w0emnj.
 - 2026-09-02T00:54:58Z [claude-2026-09-01-b] answer: 'HUMAN: Stranded work that never ages: (1) a handed-off task carries no claim, so nothing flags it (stale-claim needs claimed_at; validate has no age check for external: blocks); (2) a blocked task that retained its claim never ages either (the stale-claim branch is gated on status in_progress). Add a `stale-block` warning for `external: ready` handoffs with no Log activity for stale_claim_days (new VALIDATION_CODES entry, promoted under --strict, repaired by unblock/done/release; must not catch deliberately parked blocks such as `external: wave open`) and extend stale-claim to claim-retaining blocked tasks, or keep both process-only (integrator polls list --status blocked)? Recommendation: add both, after the handoff convention has been used once.' -> Add both now: a stale-block warning for blocked_on values starting with 'external: ready' that show no Log activity for stale_claim_days (parked blocks such as 'external: wave open' are out of scope by prefix; a note refreshes it), and extend stale-claim to claim-retaining blocked tasks. Operator criteria: an orchestrator must see forgotten handoffs and vanished workers without polling history; both are repairable by unblock/done/release.
 - 2026-09-02T00:54:58Z [claude-2026-09-01-b] unblock: -> todo
+- 2026-09-02T02:52:02Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T02:58:45Z [claude-2026-09-01-b] step: checked 'Human answers both questions; unblock or drop'
+- 2026-09-02T02:58:45Z [claude-2026-09-01-b] step: checked 'If a ready status is approved: implement per the verified design below and note T-2e587s about SCHEMA_VERSION 2'
+- 2026-09-02T02:58:45Z [claude-2026-09-01-b] step: checked 'If stranded-handoff aging is approved: add the stale-block warning + lockstep fixture'
+- 2026-09-02T02:58:45Z [claude-2026-09-01-b] note: Step 2 (ready status) resolved as NOT approved — decision recorded in the answered question and DESIGN decision #6; the verified enum design stays in this Spec should a later wave show the convention insufficient

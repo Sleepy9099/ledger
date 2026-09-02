@@ -131,6 +131,7 @@ VALIDATION_CODES = {
     "trailer-dangling": "error",    # git, --coverage only
     "exempt-policy": "error",       # git, --coverage only; exempt_allowed_paths set
     "stale-claim": "warning",
+    "stale-block": "warning",       # an `external: ready` handoff nobody picked up
     "xl-open": "warning",
     "checkbox-grammar": "warning",
     "done-loose-ends": "warning",
@@ -2964,7 +2965,10 @@ def validate_offline(ctx: Ctx) -> list[dict]:
                     "done-loose-ends",
                     "done task has unchecked steps or unanswered questions",
                     task=tid, severity="warning"))
-        if status == "in_progress" and claimed_at:
+        # a blocked task that RETAINED its claim (block keeps claimed_by)
+        # ages exactly like an in_progress one: a vanished worker must not
+        # hold a claim forever behind a block
+        if status in ("in_progress", "blocked") and claimed_at:
             if claim_is_stale(task, stale_days):
                 violations.append(err(
                     "stale-claim",
@@ -2972,6 +2976,21 @@ def validate_offline(ctx: Ctx) -> list[dict]:
                     f"{stale_days} day(s)", task=tid, severity="warning",
                     fix_hint="ledger release <id>, or ledger claim <id> --force "
                              "to take over"))
+        # stranded handoff: a `release --blocked --on "external: ready ..."`
+        # task carries no claim, so only its Log activity can age it. Scoped
+        # to the `external: ready` prefix so deliberately parked blocks
+        # (`external: wave open`) are never caught; a `note` refreshes it.
+        blocked_on = task.header.get("blocked_on") or ""
+        if (status == "blocked" and blocked_on.startswith("external: ready")
+                and claim_is_stale(task, stale_days)):
+            violations.append(err(
+                "stale-block",
+                f"handoff '{blocked_on}' has seen no Log activity for more "
+                f"than {stale_days} day(s) — nobody picked it up",
+                task=tid, severity="warning",
+                fix_hint="integrator: ledger done <id> --commit <sha> or "
+                         "ledger release <id> --note \"...\" to send it "
+                         "back; still waiting on purpose: ledger note <id>"))
         if status in ("todo", "in_progress") and task.size == "xl":
             violations.append(err(
                 "xl-open", "open task is size xl — split it", task=tid,

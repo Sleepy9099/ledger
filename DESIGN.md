@@ -321,7 +321,14 @@ anti-hallucination check**), `done-human-questions`; with `--coverage`:
 clones loudly), `trailer-dangling`, and `exempt-policy` (an exempt commit
 touching paths outside `exempt_allowed_paths`; only when the key is set).
 
-Warnings (errors under `--strict`): `stale-claim`, `xl-open`,
+Warnings (errors under `--strict`): `stale-claim` (an in_progress OR
+claim-retaining blocked task with no Log activity for `stale_claim_days` —
+a worker that vanished right after `block` must not hold a claim forever),
+`stale-block` (a `release --blocked --on "external: ready ..."` handoff with
+no Log activity for `stale_claim_days`: it carries no claim, so only its Log
+can age it; scoped to the `external: ready` prefix so parked blocks such as
+`external: wave open` are never caught, and a `note` refreshes it —
+repairable by `done` / `release` / `unblock`), `xl-open`,
 `checkbox-grammar` (near-miss checkbox lines that would silently escape the
 steps/questions machinery — and the HUMAN done gate), `done-loose-ends`
 (steps / questions; the still-open-`depends_on` form is emitted by `done`

@@ -184,7 +184,7 @@ def test_validation_code_table_is_stable(ledger_mod):
         "encoding", "parse", "conflict-markers", "id-filename", "id-unique",
         "enums", "refs", "state-coherence", "done-evidence",
         "done-human-questions", "coverage", "trailer-dangling",
-        "exempt-policy", "stale-claim",
+        "exempt-policy", "stale-claim", "stale-block",
         "xl-open", "checkbox-grammar", "done-loose-ends", "unknown-key",
         "sha-unreachable", "linked-never-claimed", "log-tamper",
         "exempt-ratio",
@@ -200,3 +200,52 @@ def test_dead_end_notes_never_affect_closing(repo):
     repo.j("note", tid, "approach B also failed", "--dead-end")
     rc, payload = validate(repo, "--no-git", "--strict", expect=0)
     assert payload["ok"]
+
+
+
+def _age_task(repo, tid):
+    """Rewrite every timestamp on a task into the distant past."""
+    text = repo.read(tid)
+    for ts_fragment in ("2026-", "2027-", "2028-"):
+        text = text.replace(ts_fragment, "2020-")
+    repo.write(tid, text)
+
+
+def test_stale_block_flags_forgotten_handoffs_only(repo):
+    handed = repo.add_task("Handed off and forgotten")
+    repo.j("claim", handed)
+    repo.j("release", handed, "--blocked", "--on",
+           "external: ready for integration", "--note", "green")
+    parked = repo.add_task("Parked wave")
+    repo.j("claim", parked)
+    repo.j("release", parked, "--blocked", "--on", "external: wave open")
+    for tid in (handed, parked):
+        _age_task(repo, tid)
+    rc, payload = validate(repo, "--no-git", expect=0)
+    stale = [e for e in payload["errors"] if e["code"] == "stale-block"]
+    assert [e["task"] for e in stale] == [handed]
+    assert "nobody picked it up" in stale[0]["message"]
+    assert "ledger done" in stale[0]["fix_hint"]
+    rc, payload = validate(repo, "--no-git", "--strict", expect=1)
+    assert "stale-block" in codes(payload, "error")
+    # a note refreshes it (still waiting on purpose); done repairs it
+    repo.j("note", handed, "integrator queue is long; still waiting")
+    rc, payload = validate(repo, "--no-git", "--strict", expect=0)
+    assert "stale-block" not in codes(payload)
+    _age_task(repo, handed)
+    repo.j("done", handed, "--no-code", "integrated", "--session",
+           "integrator")
+    rc, payload = validate(repo, "--no-git", "--strict", expect=0)
+
+
+def test_stale_claim_covers_claim_retaining_blocked_tasks(repo):
+    tid = repo.add_task("Blocked with a claim")
+    repo.j("claim", tid)
+    repo.j("block", tid, "--on", "human", "--why", "vanished after this")
+    _age_task(repo, tid)
+    rc, payload = validate(repo, "--no-git", expect=0)
+    stale = [e for e in payload["errors"] if e["code"] == "stale-claim"]
+    assert [e["task"] for e in stale] == [tid]
+    assert "stale-block" not in codes(payload)  # a human block is not a handoff
+    repo.j("release", tid, "--blocked", "--on", "human", "--force")
+    rc, payload = validate(repo, "--no-git", "--strict", expect=0)
