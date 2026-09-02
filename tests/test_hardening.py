@@ -81,7 +81,7 @@ def test_mutation_refused_on_bad_merge_file(repo):
     assert repo.task_file(tid).read_bytes() == before  # byte-identical
 
     assert repo.j("show", tid)["data"]["header"]["id"] == tid  # reads still work
-    d = repo.j("next")["data"]  # and next refuses to hand it out
+    d = repo.j("next", expect=1)["data"]  # data present, ok false: corrupt
     assert d["task"] is None or d["task"]["header"]["id"] != tid
     assert any(w["id"] == tid and "structural" in w["ineligible_because"]
                for w in d["why"])
@@ -281,7 +281,7 @@ def test_scan_write_skips_corrupt_file_with_mismatched_stem(repo):
         encoding="utf-8", newline="\n")
     before = victim.read_bytes()
     repo.commit_all("Introduce broken file", ("Ledger-Task: T-bbbbbb",))
-    repo.j("scan", "--write")
+    repo.j("scan", "--write", expect=1)  # the corrupt file makes ok false
     assert victim.read_bytes() == before  # never rewritten
 
 
@@ -545,3 +545,81 @@ def test_tamper_parser_is_hunk_aware(repo):
     tamper = [e for e in payload["errors"] if e["code"] == "log-tamper"
               and e["task"] == tid]
     assert tamper and "1 Log line(s) deleted" in tamper[0]["message"]
+
+
+
+# --- robustness bundle (sweep 2026-09-02, task E) ----------------------------
+
+def test_init_with_bad_config_json_is_a_config_envelope(repo):
+    cfg_path = repo.root / ".ledger" / "config.json"
+    cfg_path.write_text("{ not json", encoding="utf-8")
+    d = repo.j("init", expect=2)
+    assert d["errors"][0]["code"] == "config" and d["errors"][0]["fix_hint"]
+
+
+def test_unexpected_exception_is_an_internal_envelope(ledger_mod, plain,
+                                                      monkeypatch, capsys):
+    monkeypatch.chdir(plain.root)
+
+    def boom(args):
+        raise RuntimeError("simulated bug")
+    monkeypatch.setattr(ledger_mod, "cmd_list", boom)
+    rc = ledger_mod.main(["list", "--json", "--session", "t"])
+    out = capsys.readouterr()
+    payload = json.loads(out.out)
+    assert rc == 2 and payload["ok"] is False
+    assert payload["errors"][0]["code"] == "internal"
+    assert "simulated bug" in payload["errors"][0]["message"]
+    assert "RuntimeError" in out.err  # the traceback goes to stderr
+
+
+def test_bad_prefix_is_refused_before_it_can_brick_add(tmp_path, base_env):
+    from conftest import LedgerRepo, _isolated_env
+    lr = LedgerRepo(tmp_path / "px", _isolated_env(base_env, tmp_path))
+    lr.root.mkdir()
+    r = lr.run("init", "--prefix", "a:b", "--json")
+    assert r.returncode == 3
+    assert json.loads(r.stdout)["errors"][0]["code"] == "usage"
+    assert lr.run("init", "--prefix", "job_1").returncode == 0
+    assert lr.j("add", "ok")["data"]["id"].startswith("job_1-")
+    cfg_path = lr.root / ".ledger" / "config.json"
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    cfg["prefix"] = "../x"
+    cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
+    assert lr.j("list", expect=2)["errors"][0]["code"] == "config"
+
+
+def test_long_dependency_chain_does_not_recurse(repo):
+    tasks_dir = repo.root / ".ledger" / "tasks"
+    prev = None
+    for i in range(1500):
+        tid = f"T-c{i:05d}"
+        dep = f"depends_on: {prev}\n" if prev else ""
+        tasks_dir.joinpath(f"{tid}.md").write_text(
+            f"---\nid: {tid}\ntitle: chain {i}\nstatus: todo\npriority: p2\n"
+            f"size: s\ncreated: 2026-01-01T00:00:00Z\n{dep}---\n\n## Spec\n\n"
+            "## Next Steps\n\n## Open Questions\n\n## Commits\n\n## Log\n\n"
+            "- 2026-01-01T00:00:00Z [x] add: created\n",
+            encoding="utf-8", newline="\n")
+        prev = tid
+    rc, payload = validate(repo, "--no-git")
+    assert rc == 0, payload["errors"][:3]
+    # and a real cycle at the far end is still found and named
+    first = tasks_dir / "T-c00000.md"
+    first.write_text(first.read_text(encoding="utf-8").replace(
+        "size: s\n", "size: s\ndepends_on: T-c01499\n"), encoding="utf-8")
+    rc, payload = validate(repo, "--no-git")
+    assert any(e["code"] == "refs" and "cycle" in e["message"]
+               for e in payload["errors"])
+
+
+def test_unknown_section_is_warned(repo):
+    tid = repo.add_task("Heading smuggled by hand")
+    repo.write(tid, repo.read(tid).replace(
+        "## Spec\n", "## Spec\n\nintro\n\n## Approach\n\ncriteria here\n"))
+    rc, payload = validate(repo, "--no-git")
+    warn = [e for e in payload["errors"] if e["code"] == "unknown-section"]
+    assert warn and "Approach" in warn[0]["message"] and "###" in warn[0]["fix_hint"]
+    assert rc == 0
+    rc, payload = validate(repo, "--no-git", "--strict")
+    assert rc == 1

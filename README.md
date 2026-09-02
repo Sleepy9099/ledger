@@ -158,9 +158,14 @@ doctor                               offline: tool/schema/protocol versions,
                                      is the vendored copy or corpus stale?
 ```
 
-All commands accept `--json` and print `{"ok", "data", "errors"}`; every
-error carries a machine-actionable `fix_hint`. Exit codes: 0 ok,
-1 validation errors, 2 refusal, 3 usage.
+All commands accept `--json` and print `{"ok", "data", "errors"}`. `ok` is
+the success signal; `errors` also carries warning/info rows, and only
+error rows are guaranteed a `fix_hint`. Read-only commands on a corpus with
+an unreadable task file still return their data but report `ok: false`
+(exit 1) so a corrupt ledger is never mistaken for a healthy one. Exit
+codes: 0 ok, 1 validation errors, 2 refusal, 3 usage; an unexpected
+exception is reported as an `internal` refusal (exit 2) with the traceback
+on stderr, never as a bare traceback on stdout.
 
 Agent identity comes from `--session`, else the `LEDGER_SESSION` env var,
 else `git config user.name` — set the env once per session.

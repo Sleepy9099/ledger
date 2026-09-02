@@ -78,8 +78,8 @@ def test_broken_file_is_reported_not_fatal(repo):
     bad = repo.add_task("Broken")
     repo.write(bad, repo.read(bad).replace("status: todo",
                                            "status: todo\nstatus: done"))
-    d = repo.j("search", "searchable")
-    assert ids(d) == [good]
+    d = repo.j("search", "searchable", expect=1)  # data, but ok is false
+    assert ids(d) == [good] and d["ok"] is False
     assert any(e["code"] == "parse" and e["task"] == bad for e in d["errors"])
 
 

@@ -405,7 +405,9 @@ repairable by `done` / `release` / `unblock`), `xl-open`,
 line (the documented "latest Log event wins" conflict rule could re-open a
 closed task silently; closed is terminal — `ledger repair`),
 `checkbox-grammar` (near-miss checkbox lines that would silently escape the
-steps/questions machinery — and the HUMAN done gate), `done-loose-ends`
+steps/questions machinery — and the HUMAN done gate), `unknown-section`
+(an unfenced `## ` line inside a body split it into a section the next
+CLI write relocates), `done-loose-ends`
 (steps / questions; the still-open-`depends_on` form is emitted by `done`
 only, never by `validate`, so upgrading `ledger.py` can never turn strict
 CI red on existing history),

@@ -188,6 +188,7 @@ def test_validation_code_table_is_stable(ledger_mod):
         "exempt-policy", "stale-claim", "stale-block",
         "xl-open", "checkbox-grammar", "done-loose-ends", "unknown-key",
         "sha-unreachable", "linked-never-claimed", "log-tamper",
+        "unknown-section",
         "exempt-ratio", "resource-contention",
     }
     assert ledger_mod.VALIDATION_CODES["exempt-ratio"] == "info"
@@ -362,6 +363,12 @@ def test_repair_derives_a_coherent_header_for_each_incoherent_state(repo):
     repo.write(f, repo.read(f).replace("closed: ", "closed_gone: "))
     repo.j("repair", f)
     assert "closed" in _header_of(repo, f)
+    # the stray keys left above are unknown-key warnings (errors under
+    # --strict) by design; drop them, then the whole ledger is strict-clean
+    import re as _re
+    for t in (c, f):
+        repo.write(t, _re.sub(r"^(claimed_at_gone|closed_gone): .*\n", "",
+                              repo.read(t), flags=_re.M))
     rc, payload = validate(repo, "--no-git", "--strict")
     assert rc == 0, [x for x in payload["errors"] if x["severity"] == "error"]
     # nothing to repair is a refusal, not a silent no-op

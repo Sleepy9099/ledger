@@ -73,6 +73,7 @@ CLOSED_RELATION_TOKEN = {v: k for k, v in CLOSED_RELATION_KIND.items()}
 TRAILER_RE = re.compile(r"^(Ledger-Task|Ledger-Exempt):[ \t]*(.+?)[ \t]*$", re.M)
 CONFLICT_RE = re.compile(r"^(<{7}|={7}|>{7}|\|{7})( |$)")
 ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
+PREFIX_RE = re.compile(r"\w{1,8}")  # part of every filename: no separators
 
 GITATTRIBUTES_LINE = ".ledger/** text eol=lf"
 GITIGNORE_LINE = ".ledger/.lock"
@@ -139,6 +140,7 @@ VALIDATION_CODES = {
     "checkbox-grammar": "warning",
     "done-loose-ends": "warning",
     "unknown-key": "warning",
+    "unknown-section": "warning",   # an unfenced '## ' line split a body
     "sha-unreachable": "warning",   # git
     "linked-never-claimed": "warning",  # git
     "log-tamper": "error",          # git, --coverage only; git-verified
@@ -1191,8 +1193,8 @@ def validate_config(config: dict) -> None:
     if not is_int(config.get("version")):
         fail("version", "an integer schema version")
     prefix = config.get("prefix")
-    if not isinstance(prefix, str) or not prefix.strip():
-        fail("prefix", "a non-empty string")
+    if not isinstance(prefix, str) or not PREFIX_RE.fullmatch(prefix):
+        fail("prefix", "1-8 letters, digits or underscores")
     for key in ("baseline", "exempt_policy_since"):
         if config.get(key) is not None and not isinstance(config.get(key), str):
             fail(key, "null or a commit sha string")
@@ -1334,6 +1336,16 @@ def load_task_or_die(ctx: Ctx, fragment: str, for_write: bool = False) -> Task:
 # ---------------------------------------------------------------------------
 # Output envelope
 # ---------------------------------------------------------------------------
+
+
+def emit_read(args, data: dict, problems: list[dict],
+              human: list[str] | None = None) -> int:
+    """Read-only commands still return their data on a corrupt corpus, but
+    `ok` is false and the exit code 1 when a file could not be read: an
+    agent branching on `ok` must not treat a corrupt ledger as healthy."""
+    ok = not any(p.get("severity") == "error" for p in problems)
+    emit(args, ok, data, errors=problems, human=human)
+    return 0 if ok else 1
 
 
 def emit(args, ok: bool, data: dict, errors: list[dict] | None = None,
@@ -1822,6 +1834,11 @@ def cmd_init(args) -> int:
     cfg_path = ledger_dir / "config.json"
     wanted_adapters = [sanitize_inline(a) for a in
                        (getattr(args, "adapter", None) or []) if a.strip()]
+    if args.prefix and not PREFIX_RE.fullmatch(args.prefix):
+        raise LedgerError("usage", f"invalid prefix {args.prefix!r}",
+                          exit_code=3,
+                          fix_hint="1-8 letters, digits or underscores "
+                                   "(it becomes part of every filename)")
     if created:
         config = dict(DEFAULT_CONFIG)
         if args.prefix:
@@ -1835,7 +1852,14 @@ def cmd_init(args) -> int:
     else:
         # config writes on an existing repo happen ONLY behind explicit
         # operator flags (never as a side effect of re-vendoring)
-        stored = json.loads(cfg_path.read_text(encoding="utf-8"))
+        try:
+            stored = json.loads(cfg_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            raise LedgerError("config", f"cannot read {cfg_path}: {e}",
+                              fix_hint="fix or delete .ledger/config.json")
+        if not isinstance(stored, dict):
+            raise LedgerError("config", f"{cfg_path} must hold a JSON object",
+                              fix_hint="fix or delete .ledger/config.json")
         changed = False
         if (getattr(args, "enable_exempt_policy", False)
                 and stored.get("exempt_allowed_paths") is None):
@@ -2059,8 +2083,7 @@ def cmd_list(args) -> int:
                 f"{t.title}")
     else:
         human.append("no tasks match")
-    emit(args, True, {"tasks": briefs}, errors=problems, human=human)
-    return 0
+    return emit_read(args, {"tasks": briefs}, problems, human)
 
 
 def cmd_show(args) -> int:
@@ -2166,11 +2189,11 @@ def cmd_next(args) -> int:
                 "actor": {"id": ctx.actor, "source": ctx.actor_source}}
         if truncated:
             data["truncated"] = truncated
-        emit(args, True, data, errors=problems,
-             human=["nothing eligible"] +
-                   [f"  {w['id']}: {w['ineligible_because']}" for w in why]
-                   + held_lines(held) + truncation_lines(truncated))
-        return 0
+        return emit_read(
+            args, data, problems,
+            ["nothing eligible"] +
+            [f"  {w['id']}: {w['ineligible_because']}" for w in why]
+            + held_lines(held) + truncation_lines(truncated))
     top, flag = eligible[0]
     claimed = False
     warnings: list[dict] = []
@@ -2221,15 +2244,15 @@ def cmd_next(args) -> int:
     if args.n > 1:
         data["tasks"] = [task_brief(t) for t, _ in eligible[:args.n]]
     verb = "claimed" if claimed else "next"
-    emit(args, True, data, errors=warnings + problems,
-         human=[f"{verb}: {top.id} [{top.priority}/{top.size}] {top.title}"]
-               + ([f"  (took over stale claim)"] if flag == "stale_claim" else [])
-               + [f"  {top.path}"]
-               + [f"  stale block: {s['id']} blocked_on {s['blocked_on']} "
-                  f"({s['target_status']}) — ledger unblock {s['id']}"
-                  for s in stale_blocks]
-               + held_lines(held) + truncation_lines(truncated))
-    return 0
+    return emit_read(
+        args, data, warnings + problems,
+        [f"{verb}: {top.id} [{top.priority}/{top.size}] {top.title}"]
+        + ([f"  (took over stale claim)"] if flag == "stale_claim" else [])
+        + [f"  {top.path}"]
+        + [f"  stale block: {s['id']} blocked_on {s['blocked_on']} "
+           f"({s['target_status']}) — ledger unblock {s['id']}"
+           for s in stale_blocks]
+        + held_lines(held) + truncation_lines(truncated))
 
 
 def cmd_claim(args) -> int:
@@ -2659,9 +2682,8 @@ def cmd_questions(args) -> int:
         who = f" by {b['claimed_by']}" if b["claimed_by"] else ""
         human.append(f"{b['id']} [BLOCKED on human] ({b['priority']}, "
                      f"blocked{who}): {b['reason'] or '(no reason recorded)'}")
-    emit(args, True, {"questions": out, "blocked_on_human": blocked},
-         errors=problems, human=human or ["no open questions"])
-    return 0
+    return emit_read(args, {"questions": out, "blocked_on_human": blocked},
+                     problems, human or ["no open questions"])
 
 
 def _locate_answer_target(task: Task, row: dict) -> tuple[int, str] | None:
@@ -3200,8 +3222,7 @@ def cmd_scan(args) -> int:
         for r in prune_refused]
     for r in refusals:
         human.append(f"  prune refused {r['task']}: {r['fix_hint']}")
-    emit(args, not refusals, data, errors=refusals + problems, human=human)
-    return 1 if refusals else 0
+    return emit_read(args, data, refusals + problems, human)
 
 
 def cmd_done(args) -> int:
@@ -3489,6 +3510,17 @@ def validate_offline(ctx: Ctx) -> list[dict]:
                                       task=tid, severity="warning",
                                       fix_hint="probably a typo; known keys: "
                                                + ", ".join(HEADER_ORDER)))
+        for name, _content in task.sections:
+            if name not in KNOWN_SECTIONS:
+                violations.append(err(
+                    "unknown-section",
+                    f"'## {name}' is not a ledger section — an unfenced "
+                    "'## ' line split it out of its body, and the next CLI "
+                    "write relocates it after ## Commits",
+                    task=tid, severity="warning",
+                    fix_hint="use ### or deeper inside sections (or a ``` "
+                             "fence around examples), then move the text "
+                             "back into Spec"))
 
         status = task.status
         if status not in STATUSES:
@@ -3546,32 +3578,14 @@ def validate_offline(ctx: Ctx) -> list[dict]:
                         f"blocked_on references unknown task '{blocked_on}'",
                         task=task.id))
 
-    # dependency cycles
-    color: dict[str, int] = {}
-
-    def dfs(tid: str, stack: list[str]) -> list[str] | None:
-        color[tid] = 1
-        for dep in by_id[tid].depends_on if tid in by_id else []:
-            if dep not in by_id:
-                continue
-            if color.get(dep, 0) == 1:
-                return stack + [tid, dep]
-            if color.get(dep, 0) == 0:
-                cycle = dfs(dep, stack + [tid])
-                if cycle:
-                    return cycle
-        color[tid] = 2
-        return None
-
-    for task in tasks:
-        if color.get(task.id, 0) == 0:
-            cycle = dfs(task.id, [])
-            if cycle:
-                violations.append(err(
-                    "refs", "depends_on cycle: " + " -> ".join(cycle),
-                    task=cycle[0],
-                    fix_hint="break the cycle with ledger set --remove-depends"))
-                break
+    # dependency cycles — iterative (a long chain must never blow the
+    # recursion limit inside the CI gate)
+    cycle = _find_dependency_cycle(by_id)
+    if cycle:
+        violations.append(err(
+            "refs", "depends_on cycle: " + " -> ".join(cycle),
+            task=cycle[0],
+            fix_hint="break the cycle with ledger set --remove-depends"))
 
     # per-task state coherence + evidence
     stale_days = int(ctx.config.get("stale_claim_days", 7))
@@ -3725,6 +3739,41 @@ def validate_offline(ctx: Ctx) -> list[dict]:
                          "release --blocked --on 'external: waiting for "
                          f"resource {r}'"))
     return violations
+
+
+def _find_dependency_cycle(by_id: dict[str, Task]) -> list[str] | None:
+    """First depends_on cycle as [a, ..., a], or None. Explicit stack."""
+    WHITE, GREY, BLACK = 0, 1, 2
+    color: dict[str, int] = {}
+    parent: dict[str, str | None] = {}
+    for root in by_id:
+        if color.get(root, WHITE) != WHITE:
+            continue
+        stack = [(root, iter(by_id[root].depends_on))]
+        color[root], parent[root] = GREY, None
+        while stack:
+            node, deps = stack[-1]
+            advanced = False
+            for dep in deps:
+                if dep not in by_id:
+                    continue
+                if color.get(dep, WHITE) == GREY:
+                    path = [dep, node]
+                    cur = node
+                    while cur != dep:
+                        cur = parent[cur]
+                        path.append(cur)
+                    path.reverse()
+                    return path
+                if color.get(dep, WHITE) == WHITE:
+                    color[dep], parent[dep] = GREY, node
+                    stack.append((dep, iter(by_id[dep].depends_on)))
+                    advanced = True
+                    break
+            if not advanced:
+                color[node] = BLACK
+                stack.pop()
+    return None
 
 
 def _tamper_violations(patch: str, where: str, violations: list[dict]) -> None:
@@ -4176,8 +4225,7 @@ def cmd_search(args) -> int:
                       "mode": "any" if args.any else "all",
                       "regex": bool(args.regex), "fields": fields},
             "count": count, "tasks": out}
-    emit(args, True, data, errors=problems, human=human)
-    return 0
+    return emit_read(args, data, problems, human)
 
 
 # ---------------------------------------------------------------------------
@@ -4571,8 +4619,7 @@ def cmd_report(args) -> int:
             f"  commits {c['in_window']}: linked {c['linked']} exempt "
             f"{c['exempt']} unlinked {c['unlinked']} dangling {c['dangling']}"
             + (f"  final {c['final_commit']}" if c["final_commit"] else ""))
-    emit(args, True, data, errors=problems, human=human)
-    return 0
+    return emit_read(args, data, problems, human)
 
 
 # ---------------------------------------------------------------------------
@@ -5023,6 +5070,14 @@ def main(argv: list[str] | None = None) -> int:
     except LedgerError as e:
         emit(args, False, {}, errors=[e.violation])
         return e.exit_code
+    except Exception as e:  # never a bare traceback on stdout
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        emit(args, False, {}, errors=[err(
+            "internal", f"{type(e).__name__}: {e}",
+            fix_hint="a bug in ledger.py — report the command, this "
+                     "message and the traceback on stderr")])
+        return 2
 
 
 if __name__ == "__main__":
