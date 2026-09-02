@@ -621,12 +621,28 @@ def test_only_bookkeeping_paths_are_implicitly_exempt(repo):
     rc, payload = validate(repo, "--coverage")
     ratio = [e for e in payload["errors"] if e["code"] == "exempt-ratio"][0]
     assert "bookkeeping" in ratio["message"] and "trailer" in ratio["message"]
-    # the host workflow for re-vendoring: an explicit exemption passes policy
+    # re-vendoring under an exemption is NOT allowed by the policy: a
+    # modified ledger.py or config.json is code / policy work (a task)
     ledger_py.write_text(ledger_py.read_text(encoding="utf-8")
                          + "# tweak 2\n", encoding="utf-8", newline="\n")
-    repo.commit_all("Re-vendor the tool", ("Ledger-Exempt: re-vendor ledger.py",))
+    cfg_path = repo.root / ".ledger" / "config.json"
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    cfg["exempt_patterns"] = cfg["exempt_patterns"] + ["."]  # the attack
+    cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    attack = repo.commit_all("Housekeeping", ("Ledger-Exempt: housekeeping",))
     rc, payload = validate(repo, "--coverage")
-    assert not any(e["code"] == "exempt-policy" for e in payload["errors"])
+    pol = [e for e in payload["errors"] if e["code"] == "exempt-policy"
+           and attack[:7] in e["message"]]
+    assert pol and ".ledger/ledger.py" in pol[0]["message"]
+    assert ".ledger/config.json" in pol[0]["message"]
+    # ...while the fixture's bootstrap commit, which CREATED them, is clean
+    cfg["exempt_patterns"] = cfg["exempt_patterns"][:-1]
+    cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    task = repo.add_task("Re-vendor ledger.py")
+    repo.commit_all("Re-vendor ledger.py under a task", (f"Ledger-Task: {task}",))
+    rc, payload = validate(repo, "--coverage")
+    assert not any(e["code"] == "exempt-policy" and "Re-vendor" in e["message"]
+                   for e in payload["errors"])
 
 
 
@@ -735,7 +751,7 @@ def test_exempt_policy_preview_is_a_dry_run(repo):
     assert rc == 0, payload["errors"]  # forward-only: nothing checked yet
     pv = repo.j("scan", "--exempt-policy-preview")["data"]["exempt_policy_preview"]
     assert pv["policy_active"] is True and pv["would_violate"] == 1
-    assert pv["globs"][:2] == [".ledger/**", "docs/**"]
+    assert pv["globs"][0] == ".ledger/tasks/**" and "docs/**" in pv["globs"]
     assert "exempt_policy_preview" not in repo.j("scan")["data"]  # opt-in
     off = [e for e in repo.j("doctor")["errors"] if e["code"] == "exempt-policy-off"]
     assert off == []

@@ -804,18 +804,34 @@ def commit_files(repo: Path, sha: str, merge: bool) -> list[str] | None:
     nothing and lists nothing; conflict resolutions / evil merges list the
     files whose result differs from every parent.
     """
+    entries = commit_file_statuses(repo, sha, merge)
+    return None if entries is None else [path for _status, path in entries]
+
+
+def commit_file_statuses(repo: Path, sha: str,
+                         merge: bool) -> list[tuple[str, str]] | None:
+    """[(status, path)] with git's one-letter status (A added, M modified,
+    D deleted, ...); merges give the combined-diff status per parent
+    collapsed to its first letter."""
     if merge:
-        args = ["diff-tree", "--cc", "--name-only", "-r", sha]
+        args = ["diff-tree", "--cc", "--name-status", "-r", sha]
     else:
-        args = ["diff-tree", "--no-commit-id", "--name-only", "-r", "--root",
-                sha]
+        args = ["diff-tree", "--no-commit-id", "--name-status", "-r",
+                "--root", sha]
     # quotePath=false: non-ASCII paths come back unquoted, so glob policies
     # see `docs/ä.md`, not `"docs/\303\244.md"`
     rc, out = run_git(["-c", "core.quotePath=false", *args], repo)
     if rc != 0:
         return None
-    return [line for line in out.split("\n")
-            if line.strip() and not re.fullmatch(r"[0-9a-f]{40}", line.strip())]
+    entries = []
+    for line in out.split("\n"):
+        if not line.strip() or re.fullmatch(r"[0-9a-f]{40}", line.strip()):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        entries.append((parts[0][:1] or "M", parts[-1]))
+    return entries
 
 
 EXEMPT_POLICY_HINT = (
@@ -827,8 +843,14 @@ EXEMPT_POLICY_HINT = (
     "diff (generated artifacts) is the one case for widening")
 
 
+BOOKKEEPING_GLOBS = [".ledger/tasks/**", ".ledger/PROTOCOL.md", ".ledger/.lock"]
+
+
 def exempt_policy_globs(config: dict) -> list[str] | None:
-    """The allowed-path globs, `.ledger/**` always first; None = policy off."""
+    """The allowed-path globs, ledger BOOKKEEPING always first (never
+    `.ledger/**`: ledger.py is executable code and config.json is policy —
+    modifying either needs a task; creating them, the bootstrap, is always
+    allowed); None = policy off."""
     raw = config.get("exempt_allowed_paths")
     if raw is None:
         return None
@@ -837,7 +859,7 @@ def exempt_policy_globs(config: dict) -> list[str] | None:
         raise LedgerError(
             "config", "exempt_allowed_paths must be a list of non-empty "
             "glob strings", fix_hint="fix .ledger/config.json")
-    return [".ledger/**"] + [g.strip() for g in raw]
+    return list(BOOKKEEPING_GLOBS) + [g.strip() for g in raw]
 
 
 def _glob_re(glob: str) -> re.Pattern:
@@ -891,10 +913,14 @@ def exempt_policy_offenders(commit: Commit, repo: Path, globs: list[str],
         pass
     else:
         return None
-    files = commit_files(repo, commit.sha, merge=merge)
-    if files is None:
+    entries = commit_file_statuses(repo, commit.sha, merge=merge)
+    if entries is None:
         return ["(git diff-tree failed — refusing to guess)"]
-    return [f for f in files if not path_allowed(f, globs)]
+    # creating the ledger (init's bootstrap commit) is always exempt-able;
+    # MODIFYING .ledger/ledger.py or config.json is code / policy work
+    return [path for status, path in entries
+            if not path_allowed(path, globs)
+            and not (status == "A" and path.startswith(".ledger/"))]
 
 
 def compile_exempt_patterns(config: dict) -> list[re.Pattern]:
@@ -1834,6 +1860,7 @@ def cmd_init(args) -> int:
     cfg_path = ledger_dir / "config.json"
     wanted_adapters = [sanitize_inline(a) for a in
                        (getattr(args, "adapter", None) or []) if a.strip()]
+    policy_note = None
     if args.prefix and not PREFIX_RE.fullmatch(args.prefix):
         raise LedgerError("usage", f"invalid prefix {args.prefix!r}",
                           exit_code=3,
@@ -1870,6 +1897,10 @@ def cmd_init(args) -> int:
             if head:
                 stored["exempt_policy_since"] = head
             changed = True
+            policy_note = ("exemption policy enabled (forward-only from "
+                           f"{(head or 'now')[:7]}): commit this config.json "
+                           "change under a task — config.json is policy, "
+                           "not bookkeeping")
         current = list(stored.get("protocol_adapters")
                        or DEFAULT_CONFIG["protocol_adapters"])
         new_adapters = [a for a in wanted_adapters if a not in current]
@@ -1931,7 +1962,7 @@ def cmd_init(args) -> int:
         "",
         CI_SNIPPET,
         "Optional shell alias:  alias ledger='python .ledger/ledger.py'",
-    ]
+    ] + ([policy_note] if policy_note else [])
     emit(args, True, {"ledger_dir": str(ledger_dir),
                       "baseline": config.get("baseline"),
                       "created": created, "ci_snippet": CI_SNIPPET,

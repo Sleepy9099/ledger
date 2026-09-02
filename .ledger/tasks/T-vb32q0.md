@@ -1,10 +1,12 @@
 ---
 id: T-vb32q0
 title: Exemption policy: implicit allowance narrowed to bookkeeping paths; ledger.py re-vendoring via the default globs; config.json changes need a task
-status: todo
+status: in_progress
 priority: p2
 size: xs
 created: 2026-09-02T11:44:57Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T12:06:49Z
 tags: integrity
 ---
 
@@ -27,3 +29,4 @@ The always-allowed prefix becomes the bookkeeping set (`.ledger/tasks/**`, `.led
 ## Log
 
 - 2026-09-02T11:44:57Z [claude-2026-09-01-b] add: created: Exemption policy: implicit allowance narrowed to bookkeeping paths; ledger.py re-vendoring via the default globs; config.json changes need a task [p2/xs] (tags: integrity)
+- 2026-09-02T12:06:49Z [claude-2026-09-01-b] claim: claimed

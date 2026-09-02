@@ -214,8 +214,13 @@ never path-checked (forward-only, no history rewrite) and `doctor` reports
 `exempt-policy-off` until then. The implicit path exemption covers ledger
 BOOKKEEPING only — `.ledger/tasks/**`, `PROTOCOL.md`, the lock file —
 because `.ledger/ledger.py` is executable code and `config.json` is policy:
-both need a trailer or an explicit exemption (`.ledger/**` stays in the
-allowed globs so a host's `Ledger-Exempt: re-vendor ledger.py` passes).
+creating them (the bootstrap commit) is exempt-able, but under the
+exemption policy MODIFYING either needs a task trailer — the policy's
+always-allowed prefix is the bookkeeping set, never `.ledger/**`, because
+an exempt commit that rewrites the validator or appends "." to
+`exempt_patterns` is exactly the abuse the protocol forbids. A re-vendor
+is therefore one small task ("Update ledger.py to 1.x") — an honest
+changelog line, not a loophole.
 The exempt ratio is reported per channel (trailer / pattern / bookkeeping)
 so closure commits cannot dilute trailer abuse.
 This scopes EXEMPTIONS, not coverage (decision #11 stands): it can only

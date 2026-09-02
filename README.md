@@ -75,8 +75,10 @@ and the vendored `.ledger/ledger.py` differ (`vendored-stale`); re-run
   fails on any commit with neither (commits touching only ledger
   bookkeeping — `.ledger/tasks/**`, `PROTOCOL.md` — and subjects matching
   `exempt_patterns` in config.json are exempt; `.ledger/ledger.py` and
-  `config.json` are executable/policy files and need a trailer or an
-  explicit exemption such as `Ledger-Exempt: re-vendor ledger.py`). Forgot the
+  `config.json` are executable/policy files: creating them — the bootstrap
+  — is exempt-able, MODIFYING them needs a task trailer even under the
+  exemption policy, so a re-vendor or a policy change is one small task
+  and one changelog line). Forgot the
   trailer on a pushed commit? `ledger link <id> <sha>` — the sha-verified,
   actor-tagged link line counts as coverage; a hand-edited `## Commits` line
   alone never does.
@@ -224,8 +226,7 @@ their paths — a dry run that ignores `exempt_policy_since`), and `python
 .ledger/ledger.py init --enable-exempt-policy` turns it on FORWARD-ONLY — it writes the default
 globs plus `exempt_policy_since: <HEAD>`, and commits that are ancestors of
 that sha are never path-checked, so adopting the policy never rewrites
-history (commit that config change with a trailer or `Ledger-Exempt:
-enable exemption policy`). The exempt ratio is reported by channel
+history (commit that config change under a task — config.json is policy). The exempt ratio is reported by channel
 (explicit trailer / subject pattern / bookkeeping paths), so a workflow
 that closes each task with a bookkeeping commit does not hide trailer
 abuse. If your Markdown carries runtime prompts or agent instructions,
