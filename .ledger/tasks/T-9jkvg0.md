@@ -1,10 +1,12 @@
 ---
 id: T-9jkvg0
 title: Signal blocks whose blocked_on task has closed
-status: todo
+status: in_progress
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T01:25:34Z
 tags: ontology, coherence
 ---
 
@@ -30,9 +32,9 @@ Block a TODO task A on B (A unclaimed — `block` preserves a claim and `unblock
 
 ## Next Steps
 
-- [ ] compute_eligible: annotated why text + fourth return value stale_blocks; emit on both next paths
-- [ ] cmd_done/cmd_drop: read-only pass warning open tasks blocked on the closed id
-- [ ] DESIGN §5 next/done bullets (fix the 'when nothing is eligible' wording); README unblock line; tests
+- [x] compute_eligible: annotated why text + fourth return value stale_blocks; emit on both next paths
+- [x] cmd_done/cmd_drop: read-only pass warning open tasks blocked on the closed id
+- [x] DESIGN §5 next/done bullets (fix the 'when nothing is eligible' wording); README unblock line; tests
 
 ## Open Questions
 
@@ -45,3 +47,7 @@ Block a TODO task A on B (A unclaimed — `block` preserves a claim and `unblock
 - 2026-09-01T23:48:46Z [claude-2026-09-01-a] step: added 'cmd_done/cmd_drop: read-only pass warning open tasks blocked on the closed id'
 - 2026-09-01T23:48:47Z [claude-2026-09-01-a] step: added 'DESIGN §5 next/done bullets (fix the 'when nothing is eligible' wording); README unblock line; tests'
 - 2026-09-02T00:06:25Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: claimed-path test must use claim + block (release --blocked strips the claim, so unblock would yield todo)
+- 2026-09-02T01:25:34Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T01:30:50Z [claude-2026-09-01-b] step: checked 'compute_eligible: annotated why text + fourth return value stale_blocks; emit on both next paths'
+- 2026-09-02T01:30:50Z [claude-2026-09-01-b] step: checked 'cmd_done/cmd_drop: read-only pass warning open tasks blocked on the closed id'
+- 2026-09-02T01:30:50Z [claude-2026-09-01-b] step: checked 'DESIGN §5 next/done bullets (fix the 'when nothing is eligible' wording); README unblock line; tests'

@@ -104,6 +104,7 @@ def test_next_reports_human_blockage(repo):
     d = repo.j("next")["data"]
     assert d["task"] is None
     assert d["blocked_on_human"][0]["id"] == tid
+    assert d["stale_blocks"] == []  # human / external blocks never age here
 
 
 def test_claim_contention_and_force(repo):
@@ -470,3 +471,48 @@ def test_done_warns_on_still_open_dependencies(repo):
     w3 = repo.j("add", "Wave 3", "--after", b)["data"]["id"]
     d = repo.j("done", w3, "--commit", "HEAD")
     assert d["ok"] and any("depends_on" in e["message"] for e in d["errors"])
+
+
+
+# --- blocks whose target task has closed (T-9jkvg0) --------------------------
+
+def test_next_and_closing_verbs_signal_blocks_on_closed_tasks(repo):
+    b = repo.add_task("Blocker")
+    a = repo.add_task("Waiting on the blocker")
+    repo.j("block", a, "--on", b)
+    assert repo.j("next")["data"]["stale_blocks"] == []
+    d = repo.j("done", b, "--no-code", "shipped elsewhere")
+    warn = [e for e in d["errors"] if e.get("task") == a and e["code"] == "refs"]
+    assert warn and warn[0]["severity"] == "warning"
+    assert warn[0]["fix_hint"] == f"ledger unblock {a}"
+    n = repo.j("next")["data"]
+    why = {w["id"]: w["ineligible_because"] for w in n["why"]}
+    assert why[a].startswith(f"blocked_on {b}") and "(done" in why[a]
+    assert n["stale_blocks"] == [{"id": a, "blocked_on": b,
+                                  "target_status": "done"}]
+    assert repo.j("validate", "--no-git", "--strict")["ok"]  # no new code
+    repo.j("unblock", a)
+    assert repo.j("next")["data"]["task"]["header"]["id"] == a
+    # a dropped target will never close: the why says so
+    c = repo.add_task("Dropped blocker")
+    e = repo.add_task("Waiting on the dropped one")
+    repo.j("block", e, "--on", c)
+    d = repo.j("drop", c, "--why", "cut")
+    assert any(x.get("task") == e and "unblock" in (x["fix_hint"] or "")
+               for x in d["errors"])
+    n = repo.j("next")["data"]
+    why = {w["id"]: w["ineligible_because"] for w in n["why"]}
+    assert "(dropped" in why[e] and "real reason" in why[e]
+    assert {"id": e, "blocked_on": c, "target_status": "dropped"} in n[
+        "stale_blocks"]
+    # claimed path: block retains the claim; unblock restores in_progress
+    f = repo.add_task("Blocker three")
+    g = repo.add_task("Claimed waiter")
+    repo.j("claim", g)
+    repo.j("block", g, "--on", f)
+    repo.j("done", f, "--no-code", "x")
+    assert any(s["id"] == g for s in repo.j("next")["data"]["stale_blocks"])
+    repo.j("unblock", g)
+    assert repo.j("show", g)["data"]["header"]["status"] == "in_progress"
+    assert not any(s["id"] == g
+                   for s in repo.j("next")["data"]["stale_blocks"])

@@ -1168,13 +1168,26 @@ def compute_eligible(tasks: list[Task], config: dict):
     done_ids = {t.id for t in tasks if t.status == "done"}
     by_id = {t.id: t for t in tasks}
     stale_days = int(config.get("stale_claim_days", 7))
-    eligible, why, human = [], [], []
+    eligible, why, human, stale_blocks = [], [], [], []
     for task in sorted(tasks, key=sort_key):
         if task.status not in OPEN_STATUSES:
             continue
         if task.status == "blocked":
             reason = task.header.get("blocked_on", "?")
-            why.append({"id": task.id, "ineligible_because": f"blocked_on {reason}"})
+            text = f"blocked_on {reason}"
+            # a task-targeted block never auto-clears: once the target has
+            # closed, say so instead of leaving a silent dead end
+            target = by_id.get(reason)
+            if target is not None and target.status in ("done", "dropped"):
+                stale_blocks.append({"id": task.id, "blocked_on": reason,
+                                     "target_status": target.status})
+                if target.status == "done":
+                    text += f" (done — ledger unblock {task.id})"
+                else:
+                    text += (f" (dropped — it will never close; ledger "
+                             f"unblock {task.id}, then block --on the real "
+                             "reason)")
+            why.append({"id": task.id, "ineligible_because": text})
             if reason == "human":
                 human.append({"id": task.id, "title": task.title})
             continue
@@ -1197,7 +1210,25 @@ def compute_eligible(tasks: list[Task], config: dict):
                         "size xl — split it into smaller tasks first"})
             continue
         eligible.append((task, flag))
-    return eligible, why, human
+    return eligible, why, human, stale_blocks
+
+
+def blocked_on_closed_warnings(closed: Task, all_tasks: list) -> list[dict]:
+    """Open tasks blocked on a task that just closed. Blocks never
+    auto-clear (the --why may name more than the target finishing), so the
+    closing verb names each one with its unblock hint instead."""
+    out = []
+    for t in sorted(all_tasks, key=sort_key):
+        if t.status in OPEN_STATUSES and t.header.get("blocked_on") == closed.id:
+            hint = f"ledger unblock {t.id}"
+            if closed.status == "dropped":
+                hint += " (then block --on the real reason, if one remains)"
+            out.append(err(
+                "refs",
+                f"{t.id} is blocked_on {closed.id}, which is now "
+                f"{closed.status} — blocks never auto-clear",
+                task=t.id, severity="warning", fix_hint=hint))
+    return out
 
 
 def apply_claim(task: Task, actor: str, takeover_from: str | None) -> None:
@@ -1423,7 +1454,8 @@ def cmd_next(args) -> int:
     bad = structural_problem_stems(problems)
     pool = [t for t in tasks
             if t.id not in bad and (t.path is None or t.path.stem not in bad)]
-    eligible, why, human_blocked = compute_eligible(pool, ctx.config)
+    eligible, why, human_blocked, stale_blocks = compute_eligible(
+        pool, ctx.config)
     for stem in sorted(bad):
         why.append({"id": stem, "ineligible_because":
                     "file has structural problems — run ledger validate and "
@@ -1438,7 +1470,8 @@ def cmd_next(args) -> int:
                     "file is not readable as UTF-8 — repair it"})
     if not eligible:
         emit(args, True, {"task": None, "claimed": False, "why": why,
-                          "blocked_on_human": human_blocked},
+                          "blocked_on_human": human_blocked,
+                          "stale_blocks": stale_blocks},
              errors=problems,
              human=["nothing eligible"] +
                    [f"  {w['id']}: {w['ineligible_because']}" for w in why])
@@ -1452,14 +1485,18 @@ def cmd_next(args) -> int:
         claimed = True
     data = {"task": task_full(ctx, top, trailer_links(ctx)), "claimed": claimed,
             "stale_takeover": flag == "stale_claim",
-            "why": why, "blocked_on_human": human_blocked}
+            "why": why, "blocked_on_human": human_blocked,
+            "stale_blocks": stale_blocks}
     if args.n > 1:
         data["tasks"] = [task_brief(t) for t, _ in eligible[:args.n]]
     verb = "claimed" if claimed else "next"
     emit(args, True, data, errors=problems,
          human=[f"{verb}: {top.id} [{top.priority}/{top.size}] {top.title}"]
                + ([f"  (took over stale claim)"] if flag == "stale_claim" else [])
-               + [f"  {top.path}"])
+               + [f"  {top.path}"]
+               + [f"  stale block: {s['id']} blocked_on {s['blocked_on']} "
+                  f"({s['target_status']}) — ledger unblock {s['id']}"
+                  for s in stale_blocks])
     return 0
 
 
@@ -2009,6 +2046,8 @@ def cmd_done(args) -> int:
         shas = ", ".join(c["sha"] for c in task.commits())
         task.append_log(ctx.actor, "done", f"evidence: {shas}")
     save_task(task)
+    all_tasks, _ = load_all_tasks(ctx)
+    warnings.extend(blocked_on_closed_warnings(task, all_tasks))
     emit(args, True, {"id": task.id, "commits": task.commits()},
          errors=warnings, human=[f"done: {task.id} {task.title}"])
     return 0
@@ -2078,6 +2117,7 @@ def cmd_drop(args) -> int:
             f"{t.id} depends_on {task.id}, which is now dropped — it will "
             "never become eligible", task=t.id, severity="warning",
             fix_hint=hint))
+    warnings.extend(blocked_on_closed_warnings(task, all_tasks))
     if target is not None:
         relation = ("duplicate of" if kind == "duplicate" else "superseded by")
         human = f"dropped {task.id} as {relation} {target.id}"

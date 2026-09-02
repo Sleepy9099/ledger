@@ -204,8 +204,12 @@ Notable semantics:
 
 - `next` eligibility: `todo` (plus `in_progress` with a stale claim, flagged
   as a takeover), all `depends_on` done, not blocked, size ≠ xl. Sort:
-  priority, created, id. When nothing is eligible, `why` explains every
-  near-miss machine-readably and `blocked_on_human` lists operator gates.
+  priority, created, id. `why` always explains every near-miss
+  machine-readably (not only when nothing is eligible), `blocked_on_human`
+  lists operator gates, and `stale_blocks` lists tasks blocked on a task
+  that has since closed — a task-targeted block never auto-clears (its
+  `--why` may name more than the target finishing), so `next`, `done` and
+  `drop` signal it with an `unblock` hint instead of clearing it.
 - `claim` is advisory (real isolation is git branches); fresh foreign claims
   refuse without `--force`; stale ones log a takeover.
 - `done` is the only path to status done: auto-links `--commit` args and any

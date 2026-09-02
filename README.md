@@ -91,6 +91,8 @@ claim / release --note "handoff"     session start / session end
 release <id> --blocked --on "external: ready for integration" --note "..."
                                      hand off to an integrator (PROTOCOL.md)
 block <id> --on human|T-x|external:  explicit blockage; unblock reverses
+                                     (done/drop/next flag blocks whose
+                                     target task has since closed)
 link <id> <sha|HEAD>                 attach commit evidence
 scan --write                         reconcile git trailers -> ## Commits
 done <id> [--commit HEAD]            close with evidence (refuses otherwise)
