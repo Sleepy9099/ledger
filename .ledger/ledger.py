@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.4.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 15
+PROTOCOL_VERSION = 16
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -242,11 +242,14 @@ directly with your file tools. Always pass `--json` and parse
 - Run `ledger validate --coverage` and `ledger scan --write` (`--prune`
   after a history rewrite drops dead pointers); fix what they
   report. Log conflict: keep BOTH sides' lines, drop the markers. Header
-  conflict: keep the value matching the latest Log event; re-run validate.
+  conflict: keep the closed side if either side closed (closed is
+  terminal), else the latest Log event; then `ledger repair <id>` fixes
+  the fields to match and `validate` confirms.
 
 ## Never
 
-- Never edit headers, `## Commits`, or `## Log` by hand; never delete or
+- Never edit headers, `## Commits`, or `## Log` by hand — a merge conflict
+  is the one exception, followed by `ledger repair <id>`; never delete or
   rewrite existing Log lines (CI detects it).
 - Never mint task ids by hand; only `ledger add`. Never edit
   `exempt_patterns` / `exempt_allowed_paths` to make a commit pass — ask
@@ -2279,8 +2282,8 @@ def _refuse_if_closed(task: Task, verb: str) -> None:
             "bad-state", f"{task.id} is {task.status} — closed is terminal, "
             f"{verb} is not allowed after close", task=task.id,
             fix_hint="a regression or redo is a new task (ledger search "
-                     "first, then ledger add); note/link/step check/question "
-                     "resolve remain allowed on closed tasks")
+                     "first, then ledger add); note/link/unlink/step check/"
+                     "question resolve/repair remain allowed on closed tasks")
 
 
 def _guard_foreign_claim(ctx: Ctx, task: Task, force: bool, verb: str) -> None:
@@ -2848,6 +2851,102 @@ def cmd_link(args) -> int:
     emit(args, True,
          {"id": task.id, "linked": linked, "commits": task.commits()},
          human=[f"linked {len(linked)} commit(s) to {task.id}"])
+    return 0
+
+
+def derive_coherent_header(task: Task) -> tuple[dict, list[str]]:
+    """The header that matches the task's status and Log — the repair for
+    a bad merge resolution or a hand edit. Pure: returns (new_header,
+    changes) without writing. Rules: a closing Log line makes the task
+    closed (closed is terminal); closed tasks carry no claim/block fields
+    and a `closed` stamp; todo carries neither; in_progress needs a paired
+    claim (derived from the newest claim line); blocked keeps a paired or
+    absent claim and needs blocked_on (derived from the newest block /
+    release-blocked line)."""
+    h = dict(task.header)
+    changes: list[str] = []
+    log = sorted(task.log(), key=lambda e: e["ts"])
+
+    def drop(key: str) -> None:
+        if key in h:
+            changes.append(f"dropped {key}={h[key]}")
+            del h[key]
+
+    def put(key: str, value: str) -> None:
+        if h.get(key) != value:
+            changes.append(f"set {key}={value}")
+            h[key] = value
+
+    closing = [e for e in log if e["verb"] in ("done", "done(no-code)", "drop")]
+    status = h.get("status", "")
+    if closing and status not in ("done", "dropped"):
+        newest = closing[-1]
+        put("status", "dropped" if newest["verb"] == "drop" else "done")
+        status = h["status"]
+    if status in ("done", "dropped"):
+        for key in ("claimed_by", "claimed_at", "blocked_on"):
+            drop(key)
+        if not h.get("closed") or not TS_RE.match(h.get("closed", "")):
+            put("closed", closing[-1]["ts"] if closing else now_ts())
+        return h, changes
+    drop("closed")
+    claims = [e for e in log if e["verb"] == "claim"]
+    if status == "in_progress":
+        drop("blocked_on")
+        if not h.get("claimed_by") and claims:
+            put("claimed_by", claims[-1]["actor"])
+        if h.get("claimed_by"):
+            if not TS_RE.match(h.get("claimed_at", "") or ""):
+                mine = [e for e in claims if e["actor"] == h["claimed_by"]]
+                put("claimed_at", (mine or claims or [{"ts": now_ts()}])[-1]["ts"])
+        else:
+            put("status", "todo")  # an in_progress task nobody ever claimed
+            drop("claimed_at")
+        return h, changes
+    if status == "blocked":
+        if h.get("claimed_by") and not TS_RE.match(h.get("claimed_at", "") or ""):
+            mine = [e for e in claims if e["actor"] == h["claimed_by"]]
+            put("claimed_at", (mine or claims or [{"ts": now_ts()}])[-1]["ts"])
+        if h.get("claimed_at") and not h.get("claimed_by"):
+            drop("claimed_at")
+        if not h.get("blocked_on"):
+            for e in reversed(log):
+                if e["verb"] == "block" and e["text"].startswith("on "):
+                    put("blocked_on", e["text"][3:].split(" — ", 1)[0].strip())
+                    break
+                if e["verb"] == "release" and e["text"].startswith("blocked on "):
+                    put("blocked_on",
+                        e["text"][len("blocked on "):].split(" — ", 1)[0].strip())
+                    break
+        return h, changes
+    # todo (or an unknown status: leave it for the enums check)
+    for key in ("claimed_by", "claimed_at", "blocked_on"):
+        drop(key)
+    return h, changes
+
+
+def cmd_repair(args) -> int:
+    ctx = make_ctx(args, mutating=True)
+    task = load_task_or_die(ctx, args.id, for_write=True)
+    header, changes = derive_coherent_header(task)
+    if not changes:
+        raise LedgerError("nothing-to-repair",
+                          f"{task.id}'s header is already coherent with its "
+                          "status and Log", task=task.id,
+                          fix_hint="ledger validate --json lists what is "
+                                   "actually wrong")
+    if header.get("status") == "blocked" and not header.get("blocked_on"):
+        raise LedgerError("bad-state", f"{task.id} is blocked but no Log line "
+                          "records what on", task=task.id,
+                          fix_hint="ledger block <id> --on <reason> (or "
+                                   "unblock) — the Log cannot supply it")
+    task.header = header
+    task.append_log(ctx.actor, "repair", "; ".join(changes))
+    save_task(task)
+    emit(args, True, {"id": task.id, "changes": changes,
+                      "header": {k: header.get(k) for k in HEADER_ORDER
+                                 if k in header}},
+         human=[f"repaired {task.id}: " + "; ".join(changes)])
     return 0
 
 
@@ -3480,30 +3579,36 @@ def validate_offline(ctx: Ctx) -> list[dict]:
         tid, status = task.id, task.status
         claimed_by = task.header.get("claimed_by")
         claimed_at = task.header.get("claimed_at")
+        repair_hint = ("ledger repair <id> derives the coherent header from "
+                       "status and Log (journaled) — headers are CLI-only")
         if (claimed_by is None) != (claimed_at is None):
             violations.append(err(
                 "state-coherence",
-                "claimed_by and claimed_at must appear together", task=tid))
+                "claimed_by and claimed_at must appear together", task=tid,
+                fix_hint=repair_hint))
         if status == "in_progress" and not claimed_by:
             violations.append(err(
                 "state-coherence", "in_progress task has no claimed_by/claimed_at",
-                task=tid, fix_hint="ledger claim <id>, or ledger release <id>"))
+                task=tid, fix_hint="ledger claim <id>, ledger release <id>, "
+                                   "or " + repair_hint))
         if status not in ("in_progress", "blocked") and claimed_by:
             violations.append(err(
                 "state-coherence", f"{status} task carries claim fields",
-                task=tid))
+                task=tid, fix_hint=repair_hint))
         if status == "blocked" and not task.header.get("blocked_on"):
             violations.append(err("state-coherence",
                                   "blocked task has no blocked_on", task=tid,
-                                  fix_hint="ledger block <id> --on <reason>"))
+                                  fix_hint="ledger block <id> --on <reason>, "
+                                           "or " + repair_hint))
         if status != "blocked" and task.header.get("blocked_on"):
             violations.append(err("state-coherence",
-                                  f"{status} task carries blocked_on", task=tid))
+                                  f"{status} task carries blocked_on", task=tid,
+                                  fix_hint=repair_hint))
         if status in ("done", "dropped"):
             if not task.header.get("closed"):
                 violations.append(err("state-coherence",
                                       f"{status} task has no closed timestamp",
-                                      task=tid))
+                                      task=tid, fix_hint=repair_hint))
             closing_verbs = {"done", "done(no-code)", "drop"}
             if not any(e["verb"] in closing_verbs for e in task.log()):
                 violations.append(err(
@@ -4795,6 +4900,12 @@ def build_parser() -> Parser:
     p.add_argument("id")
     p.add_argument("sha", nargs="+", help="commit sha or ref (e.g. HEAD)")
     p.set_defaults(fn=cmd_link)
+
+    p = sub.add_parser("repair", parents=[common],
+                       help="derive a coherent header from status + Log "
+                            "after a bad merge or hand edit (journaled)")
+    p.add_argument("id")
+    p.set_defaults(fn=cmd_repair)
 
     p = sub.add_parser("unlink", parents=[common],
                        help="remove ## Commits line(s) on purpose (journaled)")

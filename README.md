@@ -144,6 +144,8 @@ block <id> --on human|T-x|external:  explicit blockage; unblock reverses
                                      target task has since closed)
 link <id> <sha|HEAD>                 attach commit evidence
 unlink <id> <sha> [--why]            remove one (journaled; never silent)
+repair <id>                          after a bad merge/hand edit: derive the
+                                     header from status + Log (journaled)
 scan --write [--prune]               reconcile git trailers -> ## Commits;
                                      --prune drops pointers no longer
                                      reachable from HEAD (history rewrite)

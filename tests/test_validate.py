@@ -314,3 +314,62 @@ def test_shallow_detection_fails_closed(ledger_mod, repo, monkeypatch):
     violations = ledger_mod.validate_git(ctx, coverage=True)
     assert any(e["code"] == "coverage" and "cannot determine" in e["message"]
                for e in violations)
+
+
+
+def _header_of(repo, tid):
+    return repo.j("show", tid)["data"]["header"]
+
+
+def test_repair_derives_a_coherent_header_for_each_incoherent_state(repo):
+    # (a) a done task that a merge re-opened / left with claim fields
+    a = repo.add_task("Merged open")
+    repo.j("claim", a, "--session", "x")
+    repo.j("done", a, "--no-code", "shipped", "--session", "x")
+    repo.write(a, repo.read(a).replace("status: done\n", "status: in_progress\n"
+                                      ).replace("closed: ", "claimed_by: y\nclaimed_at: "))
+    validate(repo, "--no-git", expect=1)
+    d = repo.j("repair", a)
+    assert d["ok"] and any("status=done" in c for c in d["data"]["changes"])
+    h = _header_of(repo, a)
+    assert h["status"] == "done" and "claimed_by" not in h and "closed" in h
+    assert repo.j("show", a)["data"]["log"][-1]["verb"] == "repair"
+    # (b) todo with stray claim fields and blocked_on
+    b = repo.add_task("Stray fields")
+    repo.write(b, repo.read(b).replace(f"id: {b}", f"id: {b}\nclaimed_by: z\n"
+                                      f"claimed_at: 2026-01-01T00:00:00Z\n"
+                                      "blocked_on: human"))
+    repo.j("repair", b)
+    h = _header_of(repo, b)
+    assert h["status"] == "todo" and "claimed_by" not in h and "blocked_on" not in h
+    # (c) in_progress missing claimed_at: paired from the newest claim line
+    c = repo.add_task("Half claim")
+    repo.j("claim", c, "--session", "holder")
+    repo.write(c, repo.read(c).replace("claimed_at: ", "claimed_at_gone: "))
+    repo.j("repair", c)
+    h = _header_of(repo, c)
+    assert h["claimed_by"] == "holder" and "claimed_at" in h
+    assert "claimed_at_gone: " in repo.read(c)  # unknown keys are never touched
+    # (d) blocked without blocked_on: derived from the block line
+    e = repo.add_task("Blocked lost reason")
+    repo.j("block", e, "--on", "human", "--why", "budget")
+    repo.write(e, repo.read(e).replace("blocked_on: human\n", ""))
+    repo.j("repair", e)
+    assert _header_of(repo, e)["blocked_on"] == "human"
+    # (e) done without closed
+    f = repo.add_task("Lost closed")
+    repo.j("done", f, "--no-code", "x")
+    repo.write(f, repo.read(f).replace("closed: ", "closed_gone: "))
+    repo.j("repair", f)
+    assert "closed" in _header_of(repo, f)
+    rc, payload = validate(repo, "--no-git", "--strict")
+    assert rc == 0, [x for x in payload["errors"] if x["severity"] == "error"]
+    # nothing to repair is a refusal, not a silent no-op
+    d = repo.j("repair", f, expect=2)
+    assert d["errors"][0]["code"] == "nothing-to-repair"
+    # every state-coherence violation now carries a hint
+    g = repo.add_task("Hints")
+    repo.write(g, repo.read(g).replace(f"id: {g}", f"id: {g}\nclaimed_by: q"))
+    rc, payload = validate(repo, "--no-git", expect=1)
+    assert all(e["fix_hint"] for e in payload["errors"]
+               if e["code"] == "state-coherence")

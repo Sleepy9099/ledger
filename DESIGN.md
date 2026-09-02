@@ -344,6 +344,15 @@ Notable semantics:
   shows as `T-y (dropped, duplicate-of T-x)` in `next`'s `why`, and `drop`'s
   dependents warning hints the re-point (`--remove-depends T-y
   --add-depends T-x`). Diagnostic only: the target is not covered by `refs`.
+- Header incoherence (claim fields on a closed task, a missing `closed`,
+  a stray `blocked_on`, an unpaired claim — what a bad merge resolution or
+  a hand edit leaves) is repaired by `ledger repair <id>`: the coherent
+  header is a pure function of `status` and the Log (a closing Log line
+  wins — closed is terminal; claims come from the newest `claim` line;
+  `blocked_on` from the newest block / release-blocked line), the change
+  is journaled as one `repair:` line, and every `state-coherence` fix_hint
+  names it. It is the sanctioned answer to "headers are CLI-only" meeting
+  "resolve the merge conflict by hand".
 - Structurally broken files (bad-merge duplicate keys/sections, preamble)
   are read-only: every mutating command refuses them (exit 2, `corrupt-file`)
   until repaired, so a routine `note` can never launder away the other merge

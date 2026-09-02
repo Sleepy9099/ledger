@@ -96,11 +96,14 @@ directly with your file tools. Always pass `--json` and parse
 - Run `ledger validate --coverage` and `ledger scan --write` (`--prune`
   after a history rewrite drops dead pointers); fix what they
   report. Log conflict: keep BOTH sides' lines, drop the markers. Header
-  conflict: keep the value matching the latest Log event; re-run validate.
+  conflict: keep the closed side if either side closed (closed is
+  terminal), else the latest Log event; then `ledger repair <id>` fixes
+  the fields to match and `validate` confirms.
 
 ## Never
 
-- Never edit headers, `## Commits`, or `## Log` by hand; never delete or
+- Never edit headers, `## Commits`, or `## Log` by hand — a merge conflict
+  is the one exception, followed by `ledger repair <id>`; never delete or
   rewrite existing Log lines (CI detects it).
 - Never mint task ids by hand; only `ledger add`. Never edit
   `exempt_patterns` / `exempt_allowed_paths` to make a commit pass — ask
