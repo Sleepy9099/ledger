@@ -1,10 +1,12 @@
 ---
 id: T-dk0iid
 title: Normalize line endings repo-wide: .gitattributes text=auto eol=lf
-status: todo
+status: in_progress
 priority: p3
 size: xs
 created: 2026-09-02T03:37:50Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T03:37:50Z
 tags: infra
 ---
 
@@ -27,3 +29,4 @@ Add `* text=auto eol=lf` above the existing `.ledger/**` line; run `git add --re
 ## Log
 
 - 2026-09-02T03:37:50Z [claude-2026-09-01-b] add: created: Normalize line endings repo-wide: .gitattributes text=auto eol=lf [p3/xs] (tags: infra)
+- 2026-09-02T03:37:50Z [claude-2026-09-01-b] claim: claimed
