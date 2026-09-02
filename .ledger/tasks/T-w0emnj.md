@@ -1,12 +1,11 @@
 ---
 id: T-w0emnj
 title: Protocol refresh: one-intent-one-verb ontology and the integration handoff
-status: in_progress
+status: done
 priority: p2
 size: m
 created: 2026-09-01T23:48:39Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T01:06:46Z
+closed: 2026-09-02T01:15:17Z
 tags: protocol, docs
 ---
 
@@ -81,6 +80,8 @@ Text plus one Log-text change; no storage, header, verb, status or hook change; 
 
 ## Commits
 
+- af0a339 2026-09-01 Protocol refresh: one-intent-one-verb ontology and the integration handoff
+
 ## Log
 
 - 2026-09-01T23:48:39Z [claude-2026-09-01-a] add: created: Protocol refresh: one-intent-one-verb ontology and the integration handoff
@@ -95,3 +96,5 @@ Text plus one Log-text change; no storage, header, verb, status or hook change; 
 - 2026-09-02T01:15:00Z [claude-2026-09-01-b] step: checked 'Re-run init in this repo; README Daily commands (set row, --after, handoff line); DESIGN §5/§9, decision #6 note, fix the §1/§11 lock-file wording drift'
 - 2026-09-02T01:15:00Z [claude-2026-09-01-b] step: checked 'Tests: end-to-end handoff sequence, release Log text, init wording assertions, dogfood PROTOCOL.md == PROTOCOL_TEXT'
 - 2026-09-02T01:15:00Z [claude-2026-09-01-b] note: Budget decision: the spec's 80-line/4,000-byte pin predates the seven clauses now planned for this session; the pin is set at 110 lines / 6,000 bytes (the rewritten text is 93 lines / 5.1KB) so those clauses land by replacing wording, not appending. Protocol version 4.
+- 2026-09-02T01:15:17Z [claude-2026-09-01-b] link: af0a339 Protocol refresh: one-intent-one-verb ontology and the integration handoff
+- 2026-09-02T01:15:17Z [claude-2026-09-01-b] done: evidence: af0a339
