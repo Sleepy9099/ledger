@@ -1979,6 +1979,24 @@ def cmd_done(args) -> int:
         warnings.append(err("done-loose-ends",
                             f"{len(open_q)} unanswered question(s)",
                             task=task.id, severity="warning"))
+    if task.depends_on:
+        # CLI-time only (never in validate): closing over open prerequisites
+        # is the same coherence smell as closing with unchecked steps. A
+        # dropped dependency counts as open — one reading of depends_on
+        # tool-wide (next and drop treat it as unmet too).
+        all_tasks, _ = load_all_tasks(ctx)
+        by_id = {t.id: t for t in all_tasks}
+        open_deps = [d for d in task.depends_on
+                     if d not in by_id or by_id[d].status != "done"]
+        if open_deps:
+            details = ", ".join(_dep_status_text(d, by_id) for d in open_deps)
+            warnings.append(err(
+                "done-loose-ends",
+                f"{len(open_deps)} depends_on task(s) still open: {details}",
+                task=task.id, severity="warning",
+                fix_hint="close or drop them first, or ledger set "
+                         f"{task.id} --remove-depends <dep> if the "
+                         "dependency no longer holds"))
 
     task.header["status"] = "done"
     task.header["closed"] = now_ts()

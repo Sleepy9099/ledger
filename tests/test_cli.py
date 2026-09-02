@@ -438,3 +438,35 @@ def test_note_dead_end_writes_selectable_verb(repo):
     assert [e["verb"] for e in log[-2:]] == ["note(dead-end)", "note"]
     assert "- 2" in repo.read(tid) and "] note(dead-end): tried" in repo.read(tid)
     assert repo.j("validate", "--no-git", "--strict")["ok"]
+
+
+
+# --- done warns on still-open dependencies (T-naq65o) -----------------------
+
+def test_done_warns_on_still_open_dependencies(repo):
+    a = repo.add_task("Member A")
+    b = repo.add_task("Member B")
+    c = repo.add_task("Member C")
+    w = repo.j("add", "Wave", "--after", a, "--after", b, "--after", c)[
+        "data"]["id"]
+    repo.j("claim", a)
+    repo.j("drop", c, "--why", "cut from the wave")
+    d = repo.j("done", w, "--no-code", "stamped")
+    assert d["ok"]  # a warning, never a refusal
+    loose = [e for e in d["errors"] if e["code"] == "done-loose-ends"
+             and "depends_on" in e["message"]]
+    assert len(loose) == 1 and loose[0]["severity"] == "warning"
+    msg = loose[0]["message"]
+    assert f"{a} (in_progress)" in msg and f"{b} (todo)" in msg
+    assert f"{c} (dropped)" in msg  # dropped counts as open, like next/drop
+    assert f"ledger set {w} --remove-depends" in loose[0]["fix_hint"]
+    assert repo.j("validate", "--no-git", "--strict")["ok"]  # CLI-time only
+    # every dependency done: no depends_on warning
+    repo.j("done", a, "--no-code", "x")
+    w2 = repo.j("add", "Wave 2", "--after", a)["data"]["id"]
+    d = repo.j("done", w2, "--no-code", "x")
+    assert not any("depends_on" in e["message"] for e in d["errors"])
+    # the --commit path warns identically
+    w3 = repo.j("add", "Wave 3", "--after", b)["data"]["id"]
+    d = repo.j("done", w3, "--commit", "HEAD")
+    assert d["ok"] and any("depends_on" in e["message"] for e in d["errors"])

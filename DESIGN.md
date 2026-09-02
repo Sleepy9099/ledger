@@ -211,7 +211,9 @@ Notable semantics:
 - `done` is the only path to status done: auto-links `--commit` args and any
   trailer-claimed commits, then requires ≥1 commit line OR `--no-code
   "reason"`, and zero unanswered HUMAN questions (`--force` overrides). Warns
-  on unchecked steps / unanswered normal questions.
+  on unchecked steps / unanswered normal questions / still-open `depends_on`
+  (a dropped dependency counts as open — one reading of depends_on
+  tool-wide, shared with `next` and `drop`).
 - `set --add-depends` refuses self-references and cycles at write time.
 - `drop --duplicate-of <id>` / `--superseded-by <id>` close a task while
   naming its survivor: the relation is one Log line (§2), never a header
@@ -261,7 +263,10 @@ clones loudly) and `trailer-dangling`.
 
 Warnings (errors under `--strict`): `stale-claim`, `xl-open`,
 `checkbox-grammar` (near-miss checkbox lines that would silently escape the
-steps/questions machinery — and the HUMAN done gate), `done-loose-ends`,
+steps/questions machinery — and the HUMAN done gate), `done-loose-ends`
+(steps / questions; the still-open-`depends_on` form is emitted by `done`
+only, never by `validate`, so upgrading `ledger.py` can never turn strict
+CI red on existing history),
 `unknown-key`, `sha-unreachable` (legitimate after rebase; `scan --write`
 repairs), `linked-never-claimed` (a trailer against a still-OPEN task with no claim
 Log evidence at all — a released task is NOT flagged because its claim line
