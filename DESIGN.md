@@ -398,11 +398,15 @@ steps/questions machinery — and the HUMAN done gate), `done-loose-ends`
 only, never by `validate`, so upgrading `ledger.py` can never turn strict
 CI red on existing history),
 `unknown-key`, `sha-unreachable` (a `## Commits` line not reachable from
-HEAD — asked of HEAD's ancestry with one `rev-list`, never of the local
-object store, because after a history rewrite the old commits still
-resolve on the machine that rewrote them via the reflog but in no clone and
-never in CI; legitimate after a rebase — `scan --write` re-adds live
-trailer links), `linked-never-claimed` (a trailer against a still-OPEN task with no claim
+HEAD or any branch, tag or remote ref — asked with one `rev-list`, never
+of the local object store, because after a history rewrite the old commits
+still resolve on the machine that rewrote them via the reflog and
+refs/original/* but in no clone and never in CI, while a worker branch
+present locally keeps the evidence it cites; legitimate after a rebase —
+`scan --prune` drops the dead pointers, refusing on a shallow clone and
+never stripping a done task's last evidence unless a trailer backfilled a
+replacement in the same run, otherwise naming same-subject candidates for
+`ledger link`), `linked-never-claimed` (a trailer against a still-OPEN task with no claim
 Log evidence at all — a released task is NOT flagged because its claim line
 survives, and a closed task is NOT flagged because it cannot be claimed
 retroactively and its closing Log line records engagement); with

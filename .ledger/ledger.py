@@ -665,12 +665,16 @@ def git_resolve_commit(repo: Path, ref: str) -> dict | None:
 
 
 def reachable_index(repo: Path) -> dict[str, list[str]] | None:
-    """Every commit reachable from HEAD, keyed by 7-char prefix, from ONE
-    `git rev-list HEAD`. This — not `rev-parse --verify` — is the question a
-    `## Commits` line must answer: after a history rewrite the old commits
-    still resolve on the machine that rewrote them (reflog, refs/original/*)
-    but in no clone and never in CI. None when git fails."""
-    rc, out = run_git(["rev-list", "HEAD"], repo)
+    """Every commit reachable from HEAD or any branch, tag or remote ref,
+    keyed by 7-char prefix, from ONE `git rev-list`. This — not `rev-parse
+    --verify` — is the question a `## Commits` line must answer: after a
+    history rewrite the old commits still resolve on the machine that
+    rewrote them (reflog, refs/original/*) but in no clone and never in CI,
+    while a worker branch present locally keeps the evidence it cites
+    (refs/original/* and the reflog are deliberately excluded). None when
+    git fails."""
+    rc, out = run_git(["rev-list", "HEAD", "--branches", "--tags",
+                       "--remotes"], repo)
     if rc != 0:
         return None
     index: dict[str, list[str]] = {}
@@ -2818,31 +2822,50 @@ def cmd_unlink(args) -> int:
 
 
 def _prune_dead_commit_lines(ctx: Ctx, tasks: list[Task], repo: Path,
-                             skip_ids: set[str] | None = None) -> list[dict]:
-    """scan --prune: drop every cited sha no longer reachable from HEAD —
-    the repair after a history rewrite — journaling each removal."""
+                             skip_ids: set[str] | None = None,
+                             backfilled_ids: set[str] | None = None,
+                             subjects: dict[str, list[str]] | None = None
+                             ) -> tuple[list[dict], list[dict]]:
+    """scan --prune: drop every cited sha no longer reachable from any ref —
+    the repair after a history rewrite — journaling each removal.
+
+    Two guards keep prune from destroying evidence it cannot see: the
+    caller refuses on a shallow clone, and a DONE task never loses its LAST
+    ## Commits line unless it was backfilled in this run (a squash merge
+    quotes trailers mid-body, so nothing is backfilled and the old shas
+    are gone) — such tasks are reported with replacement candidates (same
+    subject, reachable) for the agent to confirm with `ledger link`.
+    Returns (pruned, refused)."""
     index = reachable_index(repo)
     if index is None:
-        raise LedgerError("no-git", "git rev-list HEAD failed",
+        raise LedgerError("no-git", "git rev-list failed",
                           fix_hint="prune needs a readable history")
-    pruned = []
+    pruned, refused = [], []
     for task in tasks:
         if skip_ids and (task.id in skip_ids or
                          (task.path and task.path.stem in skip_ids)):
             continue
-        dead = [c["sha"] for c in task.commits()
-                if not is_reachable(index, c["sha"])]
+        cited = task.commits()
+        dead = [c for c in cited if not is_reachable(index, c["sha"])]
         if not dead:
             continue
-        for sha in dead:
-            removed = task.remove_commit_line(sha)
+        if (task.status == "done" and len(dead) == len(cited)
+                and task.id not in (backfilled_ids or set())):
+            for c in dead:
+                refused.append({
+                    "task": task.id, "sha": c["sha"],
+                    "replacement_candidates":
+                        (subjects or {}).get(c["subject"], [])})
+            continue
+        for c in dead:
+            removed = task.remove_commit_line(c["sha"])
             if removed:
                 task.append_log(ctx.actor, "unlink",
-                                f"{removed} (unreachable from HEAD after a "
-                                "history rewrite)")
+                                f"{removed} (unreachable from any ref after "
+                                "a history rewrite)")
                 pruned.append({"task": task.id, "sha": removed})
         save_task(task)
-    return pruned
+    return pruned, refused
 
 
 def _backfill_from_trailers(ctx: Ctx, tasks: list[Task],
@@ -2926,13 +2949,23 @@ def cmd_scan(args) -> int:
                                          "n_paths": len(would)})
         else:
             unlinked.append({"sha": c.sha7, "subject": c.subject})
-    backfilled, pruned = [], []
+    backfilled, pruned, prune_refused = [], [], []
+    if prune and git_is_shallow(repo):
+        raise LedgerError(
+            "coverage", "shallow clone — prune cannot see which commits are "
+            "reachable and would delete evidence", fix_hint="fetch full "
+            "history (fetch-depth: 0 in CI) before scan --prune")
     if args.write or prune:  # --prune implies --write
         backfilled = _backfill_from_trailers(
             ctx, tasks, commits, skip_ids=structural_problem_stems(problems))
     if prune:
-        pruned = _prune_dead_commit_lines(
-            ctx, tasks, repo, skip_ids=structural_problem_stems(problems))
+        subjects: dict[str, list[str]] = {}
+        for c in commits:
+            subjects.setdefault(c.subject, []).append(c.sha7)
+        pruned, prune_refused = _prune_dead_commit_lines(
+            ctx, tasks, repo, skip_ids=structural_problem_stems(problems),
+            backfilled_ids={b["task"] for b in backfilled},
+            subjects=subjects)
     # post-merge duplicate check: concurrent branches are exactly where
     # cross-branch duplicates are minted, and scan is the non-gating ritual
     # command that already walks the corpus (a fuzzy score never fails CI)
@@ -2949,7 +2982,7 @@ def cmd_scan(args) -> int:
     similar_pairs.sort(key=lambda x: -x["score"])
     data = {"linked": linked, "exempt": exempt, "unlinked": unlinked,
             "dangling": dangling, "backfilled": backfilled,
-            "pruned": pruned,
+            "pruned": pruned, "prune_refused": prune_refused,
             "commits_scanned": len(commits),
             "exempt_policy_violations": policy_violations,
             "exempt_by_channel": by_channel,
@@ -2992,8 +3025,21 @@ def cmd_scan(args) -> int:
     if pruned:
         human.append(f"  pruned {len(pruned)} dead pointer(s): "
                      + ", ".join(f"{p['task']} {p['sha']}" for p in pruned[:10]))
-    emit(args, True, data, errors=problems, human=human)
-    return 0
+    refusals = [err(
+        "prune-refused",
+        f"{r['task']} is done and {r['sha']} is its last evidence; not "
+        "pruned (nothing was backfilled for it this run)",
+        task=r["task"],
+        fix_hint=f"ledger link {r['task']} <sha> with the rewritten commit"
+                 + (" — same-subject candidates: "
+                    + ", ".join(r["replacement_candidates"])
+                    if r["replacement_candidates"] else
+                    " (no reachable commit shares the subject)"))
+        for r in prune_refused]
+    for r in refusals:
+        human.append(f"  prune refused {r['task']}: {r['fix_hint']}")
+    emit(args, not refusals, data, errors=refusals + problems, human=human)
+    return 1 if refusals else 0
 
 
 def cmd_done(args) -> int:
@@ -3628,12 +3674,14 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
                     violations.append(err(
                         "sha-unreachable",
                         f"commit {c['sha']} in ## Commits is not reachable "
-                        "from HEAD",
+                        "from any branch, tag or remote ref",
                         task=task.id, severity="warning",
-                        fix_hint="normal after a history rewrite or a shallow "
-                                 "clone; ledger scan --prune drops dead "
-                                 "pointers (each removal is journaled) and "
-                                 "re-adds live trailer links"))
+                        fix_hint="normal after a history rewrite: ledger scan "
+                                 "--prune drops dead pointers (journaled; it "
+                                 "refuses on shallow clones and never strips "
+                                 "a done task's last evidence) and re-adds "
+                                 "live trailer links; on a shallow clone, "
+                                 "fetch full history instead"))
 
     commits, walk_error = walk_commits(repo, ctx.config.get("baseline"))
     if commits is None:

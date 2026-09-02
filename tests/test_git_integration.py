@@ -645,7 +645,7 @@ def test_sha_unreachable_asks_head_reachability_not_local_existence(repo):
     rc, payload = validate(repo)
     unreachable = [e for e in payload["errors"] if e["code"] == "sha-unreachable"]
     assert [e["task"] for e in unreachable] == [tid]
-    assert "reachable from HEAD" in unreachable[0]["message"]
+    assert "not reachable from any branch" in unreachable[0]["message"]
     assert "scan --prune" in unreachable[0]["fix_hint"]
     assert repo.j("show", tid)["data"]["commits"][0]["sha"] == old[:7]
 
@@ -741,3 +741,73 @@ def test_exempt_policy_preview_is_a_dry_run(repo):
     _set_policy(repo, None)
     off = [e for e in repo.j("doctor")["errors"] if e["code"] == "exempt-policy-off"]
     assert "--exempt-policy-preview" in off[0]["fix_hint"]
+
+
+
+# --- prune safety (sweep 2026-09-02, task A) --------------------------------
+
+def test_prune_refuses_on_shallow_clones(repo, tmp_path):
+    from conftest import LedgerRepo
+    (repo.root / "k.py").write_text("k\n", encoding="utf-8")
+    repo.commit_all("More history", ("Ledger-Exempt: filler",))
+    dest = tmp_path / "shallow-prune"
+    r = repo.git("clone", "-q", "--depth", "1", repo.root.as_uri(), str(dest),
+                 check=False)
+    if r.returncode != 0:
+        pytest.skip("local shallow clone unsupported here")
+    lr = LedgerRepo(dest, repo.env)
+    cfg_path = dest / ".ledger" / "config.json"
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    cfg["baseline"] = None
+    cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    d = lr.j("scan", "--prune", expect=2)
+    assert d["errors"][0]["code"] == "coverage"
+    assert "shallow" in d["errors"][0]["message"]
+
+
+def test_prune_keeps_evidence_that_lives_on_another_branch(repo):
+    tid = repo.add_task("Worker task")
+    repo.j("claim", tid, "--session", "worker")
+    repo.commit_all("Track worker task")
+    repo.git("checkout", "-q", "-b", "worker")
+    (repo.root / "w.py").write_text("w\n", encoding="utf-8")
+    sha = repo.commit_all("Worker work", (f"Ledger-Task: {tid}",))
+    repo.j("link", tid, "HEAD")
+    repo.commit_all("Record link")
+    # carry only the task file to main (the way an orchestrator merges
+    # bookkeeping before code lands)
+    repo.git("checkout", "-q", "main")
+    repo.git("checkout", "-q", "worker", "--", f".ledger/tasks/{tid}.md")
+    repo.commit_all("Sync task file")
+    rc, payload = validate(repo)
+    assert "sha-unreachable" not in codes(payload)  # the branch is a ref
+    d = repo.j("scan", "--prune")["data"]
+    assert d["pruned"] == [] and sha[:7] in repo.read(tid)
+
+
+def test_prune_never_strips_a_done_tasks_last_evidence(repo):
+    tid = repo.add_task("Squashed later")
+    repo.j("claim", tid)
+    base = repo.commit_all("Track task")
+    (repo.root / "s.py").write_text("s\n", encoding="utf-8")
+    old = repo.commit_all("Implement squashed feature", (f"Ledger-Task: {tid}",))
+    repo.j("done", tid, "--commit", "HEAD")
+    # a squash merge: the trailer ends up mid-body, the old sha disappears
+    repo.git("reset", "-q", "--soft", base)
+    squash = repo.commit_all("Implement squashed feature",
+                             (f"* Implement squashed feature\n\nLedger-Task: {tid}",
+                              "Reviewed-by: someone"))
+    d = repo.j("scan", "--prune", expect=1)
+    assert d["ok"] is False and d["data"]["pruned"] == []
+    refused = d["data"]["prune_refused"]
+    assert refused == [{"task": tid, "sha": old[:7],
+                        "replacement_candidates": [squash[:7]]}]
+    row = [e for e in d["errors"] if e["code"] == "prune-refused"][0]
+    assert f"ledger link {tid}" in row["fix_hint"] and squash[:7] in row["fix_hint"]
+    assert old[:7] in repo.read(tid)  # untouched
+    # the agent confirms the candidate: then prune cleans up
+    repo.j("link", tid, squash)
+    d = repo.j("scan", "--prune")["data"]
+    assert d["pruned"] == [{"task": tid, "sha": old[:7]}]
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]
