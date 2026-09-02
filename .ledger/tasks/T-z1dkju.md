@@ -1,10 +1,12 @@
 ---
 id: T-z1dkju
 title: Operator decision loop: questions with context, blocked-on-human rows, answers apply
-status: todo
+status: in_progress
 priority: p3
 size: m
 created: 2026-09-01T23:48:40Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T02:19:46Z
 depends_on: T-w0emnj
 tags: human-decisions, ergonomics
 ---
@@ -42,10 +44,10 @@ B: a 2-row file across two tasks → both answered, one `answer` Log line each, 
 
 ## Next Steps
 
-- [ ] questions: row enrichment, context, key, sibling blocked_on_human array with reason/reason_source, optional --task
-- [ ] answers apply: parse before lock, load once, selector rule, all-rows-resolve-before-write, cmd_done-style multi-error refusal, _answer_question extraction
-- [ ] README (questions fields; answers apply); DESIGN §5 command list; optional PROTOCOL_TEXT sentence on writing options under a question
-- [ ] Tests for both parts incl. lock-timeout and envelope entries
+- [x] questions: row enrichment, context, key, sibling blocked_on_human array with reason/reason_source, optional --task
+- [x] answers apply: parse before lock, load once, selector rule, all-rows-resolve-before-write, cmd_done-style multi-error refusal, _answer_question extraction
+- [x] README (questions fields; answers apply); DESIGN §5 command list; optional PROTOCOL_TEXT sentence on writing options under a question
+- [x] Tests for both parts incl. lock-timeout and envelope entries
 
 ## Open Questions
 
@@ -60,3 +62,8 @@ B: a 2-row file across two tasks → both answered, one `answer` Log line each, 
 - 2026-09-01T23:48:47Z [claude-2026-09-01-a] step: added 'Tests for both parts incl. lock-timeout and envelope entries'
 - 2026-09-02T00:06:24Z [claude-2026-09-01-a] set: depends_on + -> T-w0emnj
 - 2026-09-02T00:06:24Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: release-line reason parser must handle the `blocked on <x> — <note>` text T-w0emnj introduces; depends_on T-w0emnj added
+- 2026-09-02T02:19:46Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T02:28:44Z [claude-2026-09-01-b] step: checked 'questions: row enrichment, context, key, sibling blocked_on_human array with reason/reason_source, optional --task'
+- 2026-09-02T02:28:44Z [claude-2026-09-01-b] step: checked 'answers apply: parse before lock, load once, selector rule, all-rows-resolve-before-write, cmd_done-style multi-error refusal, _answer_question extraction'
+- 2026-09-02T02:28:44Z [claude-2026-09-01-b] step: checked 'README (questions fields; answers apply); DESIGN §5 command list; optional PROTOCOL_TEXT sentence on writing options under a question'
+- 2026-09-02T02:28:44Z [claude-2026-09-01-b] step: checked 'Tests for both parts incl. lock-timeout and envelope entries'

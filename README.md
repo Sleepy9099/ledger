@@ -96,7 +96,15 @@ note <id> "text" [--dead-end]        append a Log breadcrumb (--dead-end
 step <id> add|check|uncheck <n|text> manage Next Steps checkboxes
 question <id> add "..." [--human]    open a question (--human gates done)
 question <id> resolve <n> --answer   answer one
-questions --human                    everything waiting on the operator
+questions [--human] [--task <id>]    the operator decision view: open
+                                     questions with their indented context
+                                     (options, recommendation), task state,
+                                     a grouping key, plus every task blocked
+                                     on human with its recorded reason
+answers apply <file|->               record answers in batch: feed back the
+                                     `questions --json` envelope with an
+                                     `answer` on each row (all-or-nothing,
+                                     re-runnable; rows without answers skip)
 claim / release --note "handoff"     session start / session end
 list --mine                          everything this session holds (the
                                      session-end release list; next --json

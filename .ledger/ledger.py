@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.2.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 9
+PROTOCOL_VERSION = 10
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -145,10 +145,9 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 2. `ledger next --claim --json` — this is your task (a bounded digest:
    open steps, HUMAN questions, dead ends, recent Log; `--full` for
    everything). Read its file (Spec, Next Steps, Open Questions) BEFORE
-   writing code; that is your handoff from previous sessions. `held`
-   lists tasks you already hold from earlier — resume those before taking
-   more. If `task` is null, `why` explains it — report that instead of
-   inventing work.
+   writing code; that is your handoff. `held` lists tasks you already hold
+   from earlier — resume those before taking more. If `task` is null,
+   `why` explains it — report that instead of inventing work.
 3. `ledger questions --human --json` — surface anything listed to the
    human in your first message.
 4. Before implementing, `ledger search <symbol|component|error> --json`
@@ -158,19 +157,20 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 
 - One intent, one verb — prose in a note controls nothing:
   fact / dead end    -> `ledger note <id> "..."` (`--dead-end` for what
-                        did NOT work — it is the most valuable breadcrumb)
-  new obligation     -> `ledger search <symbol|component|error> --json`
-                        first: an open task covers it -> enrich it (`note` /
-                        `step add`); must follow it -> `add --after <id>`;
-                        else `ledger add "title" -p p2 -s s --spec -` (spec
-                        via stdin; never a note saying "someone should")
+                        did NOT work: the most valuable breadcrumb)
+  new obligation     -> `ledger search <term> --json` first; an open task
+                        covers it -> enrich it (`note` / `step add`); must
+                        follow it -> `add --after <id>`; else `ledger add
+                        "title" -p p2 -s s --spec -` (never a note saying
+                        "someone should")
   X must land first  -> `ledger add --after X` / `set <id> --add-depends X`
-                        (`next` clears it when X is done; a dropped X
-                        never satisfies — `drop` hints `--remove-depends`)
+                        (`next` clears it when X is done; a dropped X never
+                        satisfies — `drop` hints `--remove-depends`)
   cannot proceed     -> `ledger block <id> --on human|<task-id>|"external: ..."`
                         (keeps your claim; NEVER auto-clears — `unblock` it)
-  human decides      -> `ledger question <id> add "..." --human`, then keep
-                        going on the unblocked parts
+  human decides      -> `ledger question <id> add "..." --human`, options
+                        and your recommendation on indented lines under it
+                        (`questions --human` shows them); keep going elsewhere
   duplicate          -> `ledger drop <id> --duplicate-of T-x`; carry unique
                         evidence to T-x with `note` (no claim needed)
   landed             -> trailer `Ledger-Task: <id>` / `ledger done`
@@ -183,11 +183,11 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 - Inside Spec / Next Steps / Open Questions use `###` or deeper headings —
   a `## ` line starts a new file section. Fenced ``` examples are safe.
   Checkbox lines must be exactly `- [ ] text` / `- [x] text`.
-- EVERY commit that advances a task ends with a trailer line:
-  `Ledger-Task: <id>` (one per related task). Genuinely unrelated
-  commits use `Ledger-Exempt: <short reason>`. Forgot the trailer?
-  Unpushed: amend the message. Pushed: `ledger link <id> <sha>` — an
-  explicit link counts as coverage.
+- EVERY commit that advances a task ends with a trailer line in its LAST
+  paragraph: `Ledger-Task: <id>` (one per related task). Genuinely
+  unrelated commits use `Ledger-Exempt: <short reason>`. Forgot the
+  trailer? Unpushed: amend the message. Pushed: `ledger link <id> <sha>`
+  — an explicit link counts as coverage.
 - Commit `.ledger/` changes together with the code they describe.
 
 ## Finishing a task
@@ -196,24 +196,20 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
   or with unanswered HUMAN questions. That refusal is correct; fix the
   reasons it reports, do not --force it. Unnecessary? `ledger drop <id>
   --why "..."` (`--duplicate-of` / `--superseded-by <id>` name the survivor).
-- If an integrator owns commits and closing in this project, hand off
-  instead of `done`:
-  `ledger release <id> --blocked --on "external: ready for integration"
-  --note "what passed locally"`. The integrator queue is
-  `ledger list --status blocked --json` (blocked_on starts with
-  `external: ready`); the integrator closes with `ledger done <id>
+- If an integrator owns commits and closing here, hand off instead of
+  `done`: `ledger release <id> --blocked --on "external: ready for integration"
+  --note "what passed locally"`. The integrator queue is `ledger list
+  --status blocked --json`; the integrator closes with `ledger done <id>
   --commit <sha>` (no --force) or sends it back with `ledger release <id>
-  --note "integration failed: ..."`. An integrator may commit against a
-  handed-off task with the normal trailer — the handoff is the
-  authorization.
+  --note "integration failed: ..."`, and may commit against the handed-off
+  task with the normal trailer — the handoff is the authorization.
 
 ## Session end — never skip, even out of context budget
 
 1. Every unfinished task you hold (`ledger list --mine --json`): make
    Next Steps reflect reality, then `ledger release <id> --note "where I
-   stopped and why"`; a held task that is already blocked keeps its reason
-   with `release <id> --blocked --on <same reason> --note "..."` (a plain
-   release would reset it to todo).
+   stopped and why"` (already blocked? `release <id> --blocked --on <same
+   reason> --note "..."` — a plain release resets it to todo).
 2. `ledger validate --coverage --strict --json` — fix every violation
    you caused (follow the fix_hints) BEFORE your final commit. On an
    unmerged worker branch this checks that branch only; the integrator
@@ -2038,41 +2034,255 @@ def cmd_question(args) -> int:
                 f"no unanswered question matches '{args.value}' on {task.id}",
                 task=task.id,
                 fix_hint="ledger show <id> lists questions with indexes")
-        idx, line = hit
-        m = CHECKBOX_RE.match(line)
-        if m.group(1) == "x":
-            raise LedgerError("bad-state", "that question is already answered",
-                              task=task.id)
-        date = now_ts()[:10]
-        answer = sanitize_inline(args.answer)
-        new_line = f"- [x] {m.group(2)} -- ANSWERED ({date}): {answer}"
-        lines = content.split("\n")
-        lines[idx] = new_line
-        task.set_section("Open Questions", "\n".join(lines))
-        task.append_log(ctx.actor, "answer", f"'{m.group(2)}' -> {answer}")
+        _answer_question(task, hit[0], args.answer, ctx.actor)
     save_task(task)
     emit(args, True, {"id": task.id, "open_questions": task.questions()},
          human=[f"question {args.action} on {task.id}"])
     return 0
 
 
+def _answer_question(task: Task, idx: int, answer: str, actor: str) -> str:
+    """Rewrite the checkbox at line index idx of Open Questions as answered
+    and journal it. Shared by `question resolve` and `answers apply` so the
+    two can never drift. Returns the raw checkbox text (incl. HUMAN:)."""
+    lines = task.get_section("Open Questions").split("\n")
+    m = CHECKBOX_RE.match(lines[idx])
+    if m is None or m.group(1) == "x":
+        raise LedgerError("bad-state", "that question is already answered",
+                          task=task.id)
+    date = now_ts()[:10]
+    text = sanitize_inline(answer)
+    lines[idx] = f"- [x] {m.group(2)} -- ANSWERED ({date}): {text}"
+    task.set_section("Open Questions", "\n".join(lines))
+    task.append_log(actor, "answer", f"'{m.group(2)}' -> {text}")
+    return m.group(2)
+
+
+def _question_contexts(task: Task) -> list[list[str]]:
+    """Per question: the non-empty, non-checkbox, non-heading lines between
+    that checkbox and the next (the same line-level parse as
+    Task.questions()). Prose before the first checkbox belongs to no row.
+    Opportunistic — agents write options/recommendations there; the CLI
+    never authors it."""
+    out: list[list[str]] = []
+    for line in task.get_section("Open Questions").split("\n"):
+        if CHECKBOX_RE.match(line):
+            out.append([])
+        elif out and line.strip() and not line.lstrip().startswith("#"):
+            out[-1].append(line.strip())
+    return out
+
+
+def question_key(text: str) -> str:
+    """Grouping HINT for consumers (equal keys = candidate duplicates), never
+    a selector: `question resolve` addresses by index or raw substring."""
+    return re.sub(r"\s+", " ", text.casefold()).strip().rstrip("?.!").strip()
+
+
+def blocked_reason(task: Task) -> tuple[str, str | None]:
+    """The reason behind a human block, from the NEWEST block/release Log
+    line only — an older block line is a stale reason after block / unblock
+    / release --blocked. The header blocked_on stays the authoritative fact;
+    this is the operator-facing why."""
+    newest = None
+    for e in task.log():
+        if e["verb"] in ("block", "release") and (
+                newest is None or e["ts"] >= newest["ts"]):
+            newest = e
+    if newest is None:
+        return "", None
+    text = newest["text"]
+    target = task.header.get("blocked_on", "")
+    if newest["verb"] == "block":
+        prefix = f"on {target}"
+        if not text.startswith(prefix):
+            return "", "block"
+        rest = text[len(prefix):]
+    elif text.startswith("blocked on "):
+        prefix = f"blocked on {target}"
+        rest = text[len(prefix):] if text.startswith(prefix) else ""
+    else:
+        return ("" if text == "released" else text), "release"
+    return (rest[3:] if rest.startswith(" — ") else rest.strip()), newest["verb"]
+
+
+def _resolve_fragment(tasks: list, fragment: str) -> Task:
+    """load_task_or_die's exact-then-substring rule against an already
+    loaded list (no second directory scan)."""
+    frag = fragment.strip().lower()
+    exact = [t for t in tasks if t.id.lower() == frag]
+    matches = exact if len(exact) == 1 else \
+        [t for t in tasks if frag in t.id.lower()]
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        raise LedgerError("no-such-task", f"no task id matches '{fragment}'",
+                          fix_hint="ledger list shows all ids")
+    raise LedgerError("ambiguous-id", f"'{fragment}' matches multiple tasks: "
+                      + ", ".join(t.id for t in matches),
+                      fix_hint="use more characters of the id")
+
+
 def cmd_questions(args) -> int:
     ctx = make_ctx(args)
     tasks, problems = load_all_tasks(ctx)
-    out = []
+    scope = None
+    if getattr(args, "task", None):
+        scope = {_resolve_fragment(tasks, frag).id for frag in args.task}
+    out, blocked = [], []
     for task in sorted(tasks, key=sort_key):
         if task.status not in OPEN_STATUSES:
             continue
+        if scope is not None and task.id not in scope:
+            continue
+        meta = {"priority": task.priority, "status": task.status,
+                "size": task.size, "claimed_by": task.header.get("claimed_by")}
+        contexts = _question_contexts(task)
         for q in task.questions():
             if q["answered"]:
                 continue
             if args.human and not q["human"]:
                 continue
             out.append({"task": task.id, "title": task.title, "n": q["n"],
-                        "human": q["human"], "text": q["text"]})
-    human = [f"{q['task']} #{q['n']}{' [HUMAN]' if q['human'] else ''}: "
-             f"{q['text']}" for q in out] or ["no open questions"]
-    emit(args, True, {"questions": out}, errors=problems, human=human)
+                        "human": q["human"], "text": q["text"],
+                        "kind": "question", **meta,
+                        "context": contexts[q["n"] - 1]
+                        if q["n"] - 1 < len(contexts) else [],
+                        "key": question_key(q["text"])})
+        if task.status == "blocked" and task.header.get("blocked_on") == "human":
+            reason, source = blocked_reason(task)
+            blocked.append({"id": task.id, "title": task.title, **meta,
+                            "reason": reason, "reason_source": source})
+    human = []
+    for q in out:
+        who = f" by {q['claimed_by']}" if q["claimed_by"] else ""
+        human.append(f"{q['task']} #{q['n']}{' [HUMAN]' if q['human'] else ''} "
+                     f"({q['priority']}, {q['status']}{who}): {q['text']}")
+        human.extend(f"    {line}" for line in q["context"])
+    for b in blocked:
+        who = f" by {b['claimed_by']}" if b["claimed_by"] else ""
+        human.append(f"{b['id']} [BLOCKED on human] ({b['priority']}, "
+                     f"blocked{who}): {b['reason'] or '(no reason recorded)'}")
+    emit(args, True, {"questions": out, "blocked_on_human": blocked},
+         errors=problems, human=human or ["no open questions"])
+    return 0
+
+
+def _locate_answer_target(task: Task, row: dict) -> tuple[int, str] | None:
+    """Selector rule for `answers apply`: `n` is honoured only when the
+    display text at that index equals the row's text; otherwise the text
+    is the merge-safe substring address (decision #21); `n` alone behaves
+    like `question resolve <n>`."""
+    content = task.get_section("Open Questions")
+    n, text = row.get("n"), row.get("text")
+    if isinstance(n, int) and text is not None:
+        qs = task.questions()
+        if 1 <= n <= len(qs) and qs[n - 1]["text"] == text:
+            return _resolve_checkbox_line(content, str(n))
+    if text:
+        hit = _resolve_checkbox_line(content, text, want_unchecked=True)
+        return hit if hit is not None else _resolve_checkbox_line(content, text)
+    if isinstance(n, int):
+        return _resolve_checkbox_line(content, str(n))
+    return None
+
+
+def cmd_answers(args) -> int:
+    # parse the input BEFORE taking the lock: a malformed file must never
+    # hold up other agents
+    try:
+        raw = (sys.stdin.read() if args.file == "-"
+               else Path(args.file).read_text(encoding="utf-8"))
+    except OSError as e:
+        raise LedgerError("usage", f"cannot read {args.file}: {e}", exit_code=3)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise LedgerError("usage", f"answers input is not valid JSON: {e}",
+                          exit_code=3,
+                          fix_hint="pass the `questions --json` envelope, its "
+                                   "data.questions list, or a bare list of "
+                                   "{task, n?, text?, answer} rows")
+    rows = payload
+    if isinstance(payload, dict):
+        rows = (payload.get("data", {}).get("questions")
+                if isinstance(payload.get("data"), dict)
+                else payload.get("questions"))
+    if not isinstance(rows, list):
+        raise LedgerError("usage", "answers input must be a list of rows",
+                          exit_code=3)
+    ctx = make_ctx(args, mutating=True)
+    tasks, problems = load_all_tasks(ctx)
+    by_id = {t.id: t for t in tasks}
+    bad_stems = structural_problem_stems(problems)
+    plan: dict[str, list] = {}
+    targets: set[tuple[str, int]] = set()
+    skipped, errors = [], []
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict) or not row.get("task"):
+            errors.append(err("bad-row", f"row {i} has no task", fix_hint=
+                              "rows are {task, n?, text?, answer}"))
+            continue
+        label = {"task": row["task"], "n": row.get("n"), "text": row.get("text")}
+        if row.get("kind") == "block":
+            skipped.append({**label, "reason": "block row (unblock by hand)"})
+            continue
+        if not row.get("answer"):
+            skipped.append({**label, "reason": "no answer"})
+            continue
+        try:
+            task = _resolve_fragment(tasks, row["task"])
+            if task.id in bad_stems or (task.path and task.path.stem in bad_stems):
+                raise LedgerError("corrupt-file", f"{task.id} has structural "
+                                  "problems and will not be modified",
+                                  task=task.id,
+                                  fix_hint="run ledger validate and repair it")
+            hit = _locate_answer_target(task, row)
+        except LedgerError as e:
+            errors.append(e.violation)
+            continue
+        if hit is None:
+            errors.append(err("no-such-question",
+                              f"{task.id}: no question matches row {i}",
+                              task=task.id,
+                              fix_hint="ledger show <id> lists questions"))
+            continue
+        idx, line = hit
+        m = CHECKBOX_RE.match(line)
+        if m.group(1) == "x":
+            am = ANSWERED_RE.match(m.group(2))
+            existing = am.group(3) if am else None
+            if existing == sanitize_inline(row["answer"]):
+                skipped.append({**label, "task": task.id,
+                                "reason": "already-answered"})
+            else:
+                errors.append(err("bad-state", f"{task.id}: question already "
+                                  f"answered differently: {existing!r}",
+                                  task=task.id))
+            continue
+        if (task.id, idx) in targets:
+            errors.append(err("duplicate-target", f"{task.id}: two rows "
+                              "resolve to the same question", task=task.id))
+            continue
+        targets.add((task.id, idx))
+        plan.setdefault(task.id, []).append((idx, row["answer"]))
+    if errors:
+        # every row is resolved before any write: a refusal changes no file
+        emit(args, False, {"applied": [], "skipped": skipped}, errors=errors)
+        return 2
+    applied = []
+    for tid, items in plan.items():
+        task = by_id[tid]
+        lines = task.get_section("Open Questions").split("\n")
+        for idx, answer in items:
+            n = sum(1 for l in lines[:idx + 1] if CHECKBOX_RE.match(l))
+            raw_text = _answer_question(task, idx, answer, ctx.actor)
+            applied.append({"task": tid, "n": n, "text": raw_text,
+                            "answer": sanitize_inline(answer)})
+        save_task(task)  # one write per file
+    human = [f"applied {len(applied)} answer(s), skipped {len(skipped)}"]
+    human += [f"  {a['task']} #{a['n']}: {a['answer']}" for a in applied]
+    emit(args, True, {"applied": applied, "skipped": skipped}, human=human)
     return 0
 
 
@@ -3318,10 +3528,20 @@ def build_parser() -> Parser:
     p.set_defaults(fn=cmd_question)
 
     p = sub.add_parser("questions", parents=[common],
-                       help="all open questions across tasks")
+                       help="the operator decision view: open questions "
+                            "with context, plus tasks blocked on human")
     p.add_argument("--human", action="store_true",
                    help="only operator-gated questions")
+    p.add_argument("--task", action="append", metavar="ID",
+                   help="scope to these tasks (repeatable)")
     p.set_defaults(fn=cmd_questions)
+
+    p = sub.add_parser("answers", parents=[common],
+                       help="record operator answers in batch")
+    p.add_argument("action", choices=("apply",))
+    p.add_argument("file", help="`questions --json` output (or a bare list "
+                                "of {task, n?, text?, answer}); - for stdin")
+    p.set_defaults(fn=cmd_answers)
 
     p = sub.add_parser("block", parents=[common], help="mark a task blocked")
     p.add_argument("id")

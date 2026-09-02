@@ -21,7 +21,7 @@ def test_init_idempotent_and_bootstrap_files(repo):
     protocol = (ledger / "PROTOCOL.md").read_text(encoding="utf-8")
     for phrase in ("--add-depends", "not the action", "ready for integration",
                    "not scope expansion", "ledger search", "bounded digest",
-                   "`--full`", "list --mine"):
+                   "`--full`", "list --mine", "indented lines"):
         assert phrase in protocol and phrase in claude  # T-w0emnj, T-ntt2zz
     assert "ledger link <id> <sha>" in protocol
     assert "explicit link counts as coverage" in protocol
@@ -318,9 +318,10 @@ def test_every_command_emits_envelope(repo):
         ("block", tid, "--on", "human"), ("unblock", tid),
         ("set", tid, "--priority", "p1"), ("scan",), ("validate",),
         ("doctor",), ("search", "x"), ("brief", tid),
+        ("answers", "apply", "-"),
     ]
     for call in calls:
-        r = repo.run(*call, "--json")
+        r = repo.run(*call, "--json", input="[]")
         payload = json.loads(r.stdout)
         assert set(payload.keys()) == {"ok", "data", "errors"}, call
 

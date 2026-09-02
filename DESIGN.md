@@ -198,6 +198,15 @@ Commands: `init`, `add`, `list`, `show`, `next [--claim]`, `claim [--force]`,
 `question add|resolve`, `questions [--human]`, `block --on` / `unblock`,
 `link`, `scan [--write]`, `done [--commit|--no-code|--force]`, `drop --why`,
 `validate [--coverage] [--strict] [--no-git]`, `doctor`, `search`,
+`questions [--human] [--task]` (the operator decision view: rows carry
+task state, the indented context lines under each question — options and
+a recommendation the agent wrote, never CLI-authored — and a grouping key;
+`blocked_on_human` rows carry the reason from the NEWEST block/release Log
+line, never a stale older one; the header stays the only authoritative
+fact), `answers apply <file|->` (batch the answers back: parsed before the
+lock, every row resolved before any write, one save per file, `n` honoured
+only when its text still matches, else the merge-safe substring; shares
+`_answer_question` with `question resolve` so the two cannot drift),
 `brief [--last N]` (also `show --brief` / `next --brief`: the bounded digest
 — open steps with their original indexes, HUMAN-gated questions with who
 answered, `note(dead-end)` entries uncapped, the N newest Log entries by

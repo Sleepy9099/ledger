@@ -38,7 +38,11 @@ def test_random_cli_sequences_never_corrupt(plain):
     def op_question():
         tid = any_id()
         plain.run("question", tid, "add", f"q {rng.randrange(999)}?")
-        plain.run("question", tid, "resolve", "1", "--answer", "resolved")
+        if rng.random() < 0.5:
+            plain.run("question", tid, "resolve", "1", "--answer", "resolved")
+        else:
+            plain.run("answers", "apply", "-", input=json.dumps(
+                [{"task": tid, "n": 1, "answer": "applied"}]))
 
     def op_claim_release():
         tid = any_id()

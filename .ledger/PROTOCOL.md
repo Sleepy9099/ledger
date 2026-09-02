@@ -13,10 +13,9 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 2. `ledger next --claim --json` — this is your task (a bounded digest:
    open steps, HUMAN questions, dead ends, recent Log; `--full` for
    everything). Read its file (Spec, Next Steps, Open Questions) BEFORE
-   writing code; that is your handoff from previous sessions. `held`
-   lists tasks you already hold from earlier — resume those before taking
-   more. If `task` is null, `why` explains it — report that instead of
-   inventing work.
+   writing code; that is your handoff. `held` lists tasks you already hold
+   from earlier — resume those before taking more. If `task` is null,
+   `why` explains it — report that instead of inventing work.
 3. `ledger questions --human --json` — surface anything listed to the
    human in your first message.
 4. Before implementing, `ledger search <symbol|component|error> --json`
@@ -26,19 +25,20 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 
 - One intent, one verb — prose in a note controls nothing:
   fact / dead end    -> `ledger note <id> "..."` (`--dead-end` for what
-                        did NOT work — it is the most valuable breadcrumb)
-  new obligation     -> `ledger search <symbol|component|error> --json`
-                        first: an open task covers it -> enrich it (`note` /
-                        `step add`); must follow it -> `add --after <id>`;
-                        else `ledger add "title" -p p2 -s s --spec -` (spec
-                        via stdin; never a note saying "someone should")
+                        did NOT work: the most valuable breadcrumb)
+  new obligation     -> `ledger search <term> --json` first; an open task
+                        covers it -> enrich it (`note` / `step add`); must
+                        follow it -> `add --after <id>`; else `ledger add
+                        "title" -p p2 -s s --spec -` (never a note saying
+                        "someone should")
   X must land first  -> `ledger add --after X` / `set <id> --add-depends X`
-                        (`next` clears it when X is done; a dropped X
-                        never satisfies — `drop` hints `--remove-depends`)
+                        (`next` clears it when X is done; a dropped X never
+                        satisfies — `drop` hints `--remove-depends`)
   cannot proceed     -> `ledger block <id> --on human|<task-id>|"external: ..."`
                         (keeps your claim; NEVER auto-clears — `unblock` it)
-  human decides      -> `ledger question <id> add "..." --human`, then keep
-                        going on the unblocked parts
+  human decides      -> `ledger question <id> add "..." --human`, options
+                        and your recommendation on indented lines under it
+                        (`questions --human` shows them); keep going elsewhere
   duplicate          -> `ledger drop <id> --duplicate-of T-x`; carry unique
                         evidence to T-x with `note` (no claim needed)
   landed             -> trailer `Ledger-Task: <id>` / `ledger done`
@@ -51,11 +51,11 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 - Inside Spec / Next Steps / Open Questions use `###` or deeper headings —
   a `## ` line starts a new file section. Fenced ``` examples are safe.
   Checkbox lines must be exactly `- [ ] text` / `- [x] text`.
-- EVERY commit that advances a task ends with a trailer line:
-  `Ledger-Task: <id>` (one per related task). Genuinely unrelated
-  commits use `Ledger-Exempt: <short reason>`. Forgot the trailer?
-  Unpushed: amend the message. Pushed: `ledger link <id> <sha>` — an
-  explicit link counts as coverage.
+- EVERY commit that advances a task ends with a trailer line in its LAST
+  paragraph: `Ledger-Task: <id>` (one per related task). Genuinely
+  unrelated commits use `Ledger-Exempt: <short reason>`. Forgot the
+  trailer? Unpushed: amend the message. Pushed: `ledger link <id> <sha>`
+  — an explicit link counts as coverage.
 - Commit `.ledger/` changes together with the code they describe.
 
 ## Finishing a task
@@ -64,24 +64,20 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
   or with unanswered HUMAN questions. That refusal is correct; fix the
   reasons it reports, do not --force it. Unnecessary? `ledger drop <id>
   --why "..."` (`--duplicate-of` / `--superseded-by <id>` name the survivor).
-- If an integrator owns commits and closing in this project, hand off
-  instead of `done`:
-  `ledger release <id> --blocked --on "external: ready for integration"
-  --note "what passed locally"`. The integrator queue is
-  `ledger list --status blocked --json` (blocked_on starts with
-  `external: ready`); the integrator closes with `ledger done <id>
+- If an integrator owns commits and closing here, hand off instead of
+  `done`: `ledger release <id> --blocked --on "external: ready for integration"
+  --note "what passed locally"`. The integrator queue is `ledger list
+  --status blocked --json`; the integrator closes with `ledger done <id>
   --commit <sha>` (no --force) or sends it back with `ledger release <id>
-  --note "integration failed: ..."`. An integrator may commit against a
-  handed-off task with the normal trailer — the handoff is the
-  authorization.
+  --note "integration failed: ..."`, and may commit against the handed-off
+  task with the normal trailer — the handoff is the authorization.
 
 ## Session end — never skip, even out of context budget
 
 1. Every unfinished task you hold (`ledger list --mine --json`): make
    Next Steps reflect reality, then `ledger release <id> --note "where I
-   stopped and why"`; a held task that is already blocked keeps its reason
-   with `release <id> --blocked --on <same reason> --note "..."` (a plain
-   release would reset it to todo).
+   stopped and why"` (already blocked? `release <id> --blocked --on <same
+   reason> --note "..."` — a plain release resets it to todo).
 2. `ledger validate --coverage --strict --json` — fix every violation
    you caused (follow the fix_hints) BEFORE your final commit. On an
    unmerged worker branch this checks that branch only; the integrator
