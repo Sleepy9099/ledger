@@ -20,8 +20,8 @@ directly with your file tools. Always pass `--json` and parse
    `why` explains it — report that instead of inventing work.
 3. `ledger questions --human --json` — surface anything listed in your
    first message.
-4. Before implementing, `ledger search <symbol|component|error> --json`
-   surfaces prior dead ends and landmines recorded on other tasks.
+4. Before implementing, `ledger search <symbol> --json` surfaces dead ends
+   and landmines recorded on other tasks.
 
 ## While working
 
@@ -45,9 +45,9 @@ directly with your file tools. Always pass `--json` and parse
                         evidence to T-x with `note` (no claim needed)
   landed             -> trailer `Ledger-Task: <id>` / `ledger done`
   A note that asks a future session to act is not the action — file the
-  task or step. Do NOT silently expand your task; if investigation shows
-  the Spec's premise is wrong, correct the Spec, `note` it, and implement
-  the corrected intent — that is not scope expansion.
+  task or step. Do NOT silently expand your task; if the Spec's premise
+  proves wrong, correct the Spec, `note` it, and implement the corrected
+  intent — that is not scope expansion.
 - Check finished steps (`ledger step <id> check <n>`), add discovered ones
   (`step <id> add "..."`); the file is your memory, not the conversation.
 - Inside Spec / Next Steps / Open Questions use `###` or deeper headings —
@@ -64,10 +64,11 @@ directly with your file tools. Always pass `--json` and parse
 
 ## Finishing a task
 
-- `ledger done <id> --commit HEAD` — it refuses without commit evidence
-  or with unanswered HUMAN questions. That refusal is correct; fix the
-  reasons it reports, do not --force it. Unnecessary? `ledger drop <id>
-  --why "..."` (`--duplicate-of` / `--superseded-by <id>` name the survivor).
+- `ledger done <id> --commit HEAD` — it refuses without commit evidence,
+  with unanswered questions or with unchecked steps (check, mark `-- MOOT:`
+  or delete them); fix what it reports, never --force. Closed is terminal.
+  Unnecessary? `ledger drop <id> --why "..."` (`--duplicate-of` /
+  `--superseded-by <id>` name the survivor).
 - If an integrator owns commits and closing here, hand off instead of
   `done`: `ledger release <id> --blocked --on "external: ready for integration"
   --note "what passed locally"`. The integrator queue is `ledger list
@@ -102,7 +103,7 @@ directly with your file tools. Always pass `--json` and parse
   `exempt_patterns` / `exempt_allowed_paths` to make a commit pass — ask
   via a HUMAN question.
 - Never delete a task file (`drop` instead), never mark work done
-  without evidence, never commit code for work that has no task, and
+  without evidence, never commit code that has no task, and
   never work on a task you haven't claimed (or been handed).
 
 <!-- LEDGER:END -->

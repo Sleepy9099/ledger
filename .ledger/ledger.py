@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.2.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 11
+PROTOCOL_VERSION = 12
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -163,8 +163,8 @@ directly with your file tools. Always pass `--json` and parse
    `why` explains it — report that instead of inventing work.
 3. `ledger questions --human --json` — surface anything listed in your
    first message.
-4. Before implementing, `ledger search <symbol|component|error> --json`
-   surfaces prior dead ends and landmines recorded on other tasks.
+4. Before implementing, `ledger search <symbol> --json` surfaces dead ends
+   and landmines recorded on other tasks.
 
 ## While working
 
@@ -188,9 +188,9 @@ directly with your file tools. Always pass `--json` and parse
                         evidence to T-x with `note` (no claim needed)
   landed             -> trailer `Ledger-Task: <id>` / `ledger done`
   A note that asks a future session to act is not the action — file the
-  task or step. Do NOT silently expand your task; if investigation shows
-  the Spec's premise is wrong, correct the Spec, `note` it, and implement
-  the corrected intent — that is not scope expansion.
+  task or step. Do NOT silently expand your task; if the Spec's premise
+  proves wrong, correct the Spec, `note` it, and implement the corrected
+  intent — that is not scope expansion.
 - Check finished steps (`ledger step <id> check <n>`), add discovered ones
   (`step <id> add "..."`); the file is your memory, not the conversation.
 - Inside Spec / Next Steps / Open Questions use `###` or deeper headings —
@@ -207,10 +207,11 @@ directly with your file tools. Always pass `--json` and parse
 
 ## Finishing a task
 
-- `ledger done <id> --commit HEAD` — it refuses without commit evidence
-  or with unanswered HUMAN questions. That refusal is correct; fix the
-  reasons it reports, do not --force it. Unnecessary? `ledger drop <id>
-  --why "..."` (`--duplicate-of` / `--superseded-by <id>` name the survivor).
+- `ledger done <id> --commit HEAD` — it refuses without commit evidence,
+  with unanswered questions or with unchecked steps (check, mark `-- MOOT:`
+  or delete them); fix what it reports, never --force. Closed is terminal.
+  Unnecessary? `ledger drop <id> --why "..."` (`--duplicate-of` /
+  `--superseded-by <id>` name the survivor).
 - If an integrator owns commits and closing here, hand off instead of
   `done`: `ledger release <id> --blocked --on "external: ready for integration"
   --note "what passed locally"`. The integrator queue is `ledger list
@@ -245,7 +246,7 @@ directly with your file tools. Always pass `--json` and parse
   `exempt_patterns` / `exempt_allowed_paths` to make a commit pass — ask
   via a HUMAN question.
 - Never delete a task file (`drop` instead), never mark work done
-  without evidence, never commit code for work that has no task, and
+  without evidence, never commit code that has no task, and
   never work on a task you haven't claimed (or been handed).
 """
 
@@ -1986,6 +1987,19 @@ def cmd_claim(args) -> int:
     return 0
 
 
+def _refuse_if_closed(task: Task, verb: str) -> None:
+    """Closed is terminal (decision #12): after done/drop only the
+    append-only or repair-only verbs (note, link, step check, question
+    resolve) are allowed; everything else is a new task."""
+    if task.status in ("done", "dropped"):
+        raise LedgerError(
+            "bad-state", f"{task.id} is {task.status} — closed is terminal, "
+            f"{verb} is not allowed after close", task=task.id,
+            fix_hint="a regression or redo is a new task (ledger search "
+                     "first, then ledger add); note/link/step check/question "
+                     "resolve remain allowed on closed tasks")
+
+
 def _guard_foreign_claim(ctx: Ctx, task: Task, force: bool, verb: str) -> None:
     """Refuse to strip another session's FRESH claim without --force."""
     holder = task.header.get("claimed_by")
@@ -2065,6 +2079,7 @@ def _would_cycle(ctx: Ctx, task_id: str, new_deps: list[str]) -> bool:
 def cmd_set(args) -> int:
     ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
+    _refuse_if_closed(task, "set")
     changes = []
     if args.title is not None:
         new_title = _require_title(args.title)
@@ -2179,6 +2194,8 @@ def cmd_step(args) -> int:
     ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
     content = task.get_section("Next Steps")
+    if args.action != "check":  # check repairs a closed task; add/uncheck reopen work
+        _refuse_if_closed(task, f"step {args.action}")
     if args.action == "add":
         line = f"- [ ] {sanitize_inline(args.value)}"
         task.set_section("Next Steps", (content + "\n" + line) if content else line)
@@ -2209,6 +2226,7 @@ def cmd_question(args) -> int:
     task = load_task_or_die(ctx, args.id, for_write=True)
     content = task.get_section("Open Questions")
     if args.action == "add":
+        _refuse_if_closed(task, "question add")  # resolve repairs; add reopens
         text = sanitize_inline(args.value)
         prefix = "HUMAN: " if args.human else ""
         line = f"- [ ] {prefix}{text}"
@@ -2689,31 +2707,43 @@ def cmd_done(args) -> int:
             task=task.id,
             fix_hint="link evidence: ledger done <id> --commit HEAD, or explain "
                      "with --no-code \"reason\" if the task needed no commits"))
+    # closed is terminal: done refuses EVERY state strict CI would reject,
+    # so a closed task can never be born red. --force never bypasses these
+    # (a moot HUMAN question is answered "moot: ..."; a moot step is checked
+    # with a `-- MOOT: reason` suffix or deleted).
     open_human = [q for q in task.questions() if q["human"] and not q["answered"]]
-    if open_human and not args.force:
-        for q in open_human:
-            refusals.append(err(
-                "done-human-questions",
-                f"unanswered HUMAN question: {q['text']}",
-                task=task.id,
-                fix_hint="ledger question <id> resolve <n> --answer \"...\" after "
-                         "the human answers, or --force if truly moot"))
+    for q in open_human:
+        refusals.append(err(
+            "done-human-questions",
+            f"unanswered HUMAN question: {q['text']}",
+            task=task.id,
+            fix_hint=f"ledger question {task.id} resolve <n> --answer \"...\" "
+                     "once the human answers (\"moot: <why>\" if it no "
+                     "longer applies)"))
+    open_steps = [s for s in task.steps() if not s["done"]]
+    if open_steps:
+        refusals.append(err(
+            "done-loose-ends",
+            f"{len(open_steps)} unchecked next step(s): "
+            + "; ".join(f"#{s['n']} {s['text'][:40]}" for s in open_steps[:3]),
+            task=task.id,
+            fix_hint=f"ledger step {task.id} check <n> (append `-- MOOT: "
+                     "reason` to the line if it was overtaken), or delete "
+                     "the stale line — Next Steps must reflect reality"))
+    open_q = [q for q in task.questions() if not q["answered"] and not q["human"]]
+    if open_q:
+        refusals.append(err(
+            "done-loose-ends",
+            f"{len(open_q)} unanswered question(s): "
+            + "; ".join(q["text"][:40] for q in open_q[:3]),
+            task=task.id,
+            fix_hint=f"ledger question {task.id} resolve <n> --answer "
+                     "\"...\", or delete the line if it no longer matters"))
     if refusals:
         emit(args, False, {"id": task.id}, errors=refusals)
         return 2
 
     warnings = []
-    open_steps = [s for s in task.steps() if not s["done"]]
-    if open_steps:
-        warnings.append(err("done-loose-ends",
-                            f"{len(open_steps)} unchecked next step(s)",
-                            task=task.id, severity="warning",
-                            fix_hint="check them or delete stale ones"))
-    open_q = [q for q in task.questions() if not q["answered"] and not q["human"]]
-    if open_q:
-        warnings.append(err("done-loose-ends",
-                            f"{len(open_q)} unanswered question(s)",
-                            task=task.id, severity="warning"))
     if task.depends_on:
         # CLI-time only (never in validate): closing over open prerequisites
         # is the same coherence smell as closing with unchecked steps. A
@@ -4177,8 +4207,8 @@ def build_parser() -> Parser:
     p.add_argument("--no-code", metavar="REASON",
                    help="close without commits, with a reason")
     p.add_argument("--force", action="store_true",
-                   help="override the unanswered-HUMAN-question refusal and "
-                        "the foreign-fresh-claim guard")
+                   help="override the foreign-fresh-claim guard only (never "
+                        "the evidence, question or step gates)")
     p.set_defaults(fn=cmd_done)
 
     p = sub.add_parser("drop", parents=[common],

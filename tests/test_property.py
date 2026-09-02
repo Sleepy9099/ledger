@@ -64,9 +64,8 @@ def test_random_cli_sequences_never_corrupt(plain):
         a, b = any_id(), any_id()
         plain.run("set", a, "--add-depends", b)  # self/cycle may be refused
 
-    def op_done():
-        plain.run("done", any_id(), "--no-code", "synthetic completion",
-                  "--force")
+    def op_done():  # refused while steps/questions are open: that is fine
+        plain.run("done", any_id(), "--no-code", "synthetic completion")
 
     def op_drop():
         if rng.random() < 0.5:  # self / dropped target may be refused: fine

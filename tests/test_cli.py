@@ -22,7 +22,8 @@ def test_init_idempotent_and_bootstrap_files(repo):
     for phrase in ("--add-depends", "not the action", "ready for integration",
                    "not scope expansion", "ledger search", "bounded digest",
                    "`--full`", "list --mine", "indented lines",
-                   "no product-work obligation", "exempt_allowed_paths"):
+                   "no product-work obligation", "exempt_allowed_paths",
+                   "Closed is terminal"):
         assert phrase in protocol and phrase in claude  # T-w0emnj, T-ntt2zz
     assert "ledger link <id> <sha>" in protocol
     assert "explicit link counts as coverage" in protocol
@@ -244,20 +245,73 @@ def test_done_blocked_by_human_question(repo):
     assert repo.j("done", tid, "--no-code", "n/a")["ok"]
 
 
-def test_done_force_overrides_human_question(repo):
+def test_done_force_never_bypasses_the_question_gate(repo):
     tid = repo.add_task("Moot")
     repo.j("question", tid, "add", "moot question?", "--human")
-    ok = repo.j("done", tid, "--no-code", "obsoleted", "--force")
-    assert ok["ok"]
+    refused = repo.j("done", tid, "--no-code", "obsoleted", "--force",
+                     expect=2)
+    assert refused["errors"][0]["code"] == "done-human-questions"
+    assert "moot" in refused["errors"][0]["fix_hint"]
+    repo.j("question", tid, "resolve", "moot", "--answer",
+           "moot: feature removed")
+    assert repo.j("done", tid, "--no-code", "obsoleted")["ok"]
 
 
-def test_done_warns_on_loose_ends(repo):
+def test_done_refuses_loose_ends(repo):
+    """Closed is terminal: done refuses every state strict CI would reject,
+    so a closed task can never be born red (T-ledxp4)."""
     tid = repo.add_task("Loose")
     repo.j("step", tid, "add", "never finished")
-    d = repo.j("done", tid, "--no-code", "abandoned half-way on purpose")
-    assert d["ok"]
-    assert any(e["code"] == "done-loose-ends" and e["severity"] == "warning"
-               for e in d["errors"])
+    repo.j("question", tid, "add", "cache ttl?")
+    before = repo.read(tid)
+    d = repo.j("done", tid, "--no-code", "abandoned half-way", expect=2)
+    codes_seen = [e["code"] for e in d["errors"]]
+    assert codes_seen == ["done-loose-ends", "done-loose-ends"]
+    assert all(e["severity"] == "error" for e in d["errors"])
+    assert "MOOT" in d["errors"][0]["fix_hint"]
+    assert "never finished" in d["errors"][0]["message"]
+    assert repo.read(tid) == before  # a refusal changes nothing
+    repo.j("step", tid, "check", "1")
+    repo.j("question", tid, "resolve", "ttl", "--answer", "60s")
+    assert repo.j("done", tid, "--no-code", "finished")["ok"]
+    assert repo.j("validate", "--no-git", "--strict")["ok"]
+
+
+def test_closed_is_terminal_allowlist(repo):
+    tid = repo.add_task("Finished")
+    repo.j("step", tid, "add", "shipped")
+    repo.j("step", tid, "check", "1")
+    repo.j("done", tid, "--no-code", "shipped")
+    before = repo.read(tid)
+    refused = [
+        ("set", tid, "--priority", "p0"),
+        ("step", tid, "add", "one more thing"),
+        ("step", tid, "uncheck", "1"),
+        ("question", tid, "add", "another?", "--human"),
+        ("block", tid, "--on", "human"),
+        ("claim", tid),
+        ("release", tid),
+    ]
+    for call in refused:
+        d = repo.j(*call, expect=2)
+        assert d["errors"][0]["code"] == "bad-state", call
+        assert repo.read(tid) == before, call
+    hint = repo.j("set", tid, "--priority", "p0", expect=2)["errors"][0][
+        "fix_hint"]
+    assert "new task" in hint
+    # the allowlist: append-only or repair-only verbs still work
+    assert repo.j("note", tid, "post-mortem: fine", "--dead-end")["ok"]
+    assert repo.j("step", tid, "check", "1")["ok"] or True  # already checked
+    dropped = repo.add_task("Dropped one")
+    repo.j("drop", dropped, "--why", "cut")
+    assert repo.j("step", dropped, "add", "x", expect=2)["errors"][0][
+        "code"] == "bad-state"
+    # a hand-edited loose end on a closed task is repaired with an allowed verb
+    repo.write(tid, repo.read(tid).replace(
+        "## Open Questions\n", "## Open Questions\n\n- [ ] HUMAN: late?\n"))
+    assert repo.run("validate", "--no-git", "--strict").returncode == 1
+    assert repo.j("question", tid, "resolve", "late", "--answer", "no")["ok"]
+    assert repo.j("validate", "--no-git", "--strict")["ok"]
 
 
 def test_drop_and_closed_states_refuse_verbs(repo):

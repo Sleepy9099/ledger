@@ -155,8 +155,9 @@ def test_warning_tier_and_strict_promotion(repo):
     repo.write(tid, text)
     xl = repo.add_task("Whale", "-s", "xl")
     loose = repo.add_task("Loose done")
-    repo.j("step", loose, "add", "left unchecked")
     repo.j("done", loose, "--no-code", "meh")
+    repo.write(loose, repo.read(loose).replace(  # done refuses this: hand-edit
+        "## Next Steps\n", "## Next Steps\n\n- [ ] left unchecked\n"))
     unknown = repo.add_task("Typo")
     repo.write(unknown, repo.read(unknown).replace(
         f"id: {unknown}", f"id: {unknown}\npriorty: p1"))

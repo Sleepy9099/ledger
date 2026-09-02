@@ -133,7 +133,8 @@ block <id> --on human|T-x|external:  explicit blockage; unblock reverses
                                      target task has since closed)
 link <id> <sha|HEAD>                 attach commit evidence
 scan --write                         reconcile git trailers -> ## Commits
-done <id> [--commit HEAD]            close with evidence (refuses otherwise)
+done <id> [--commit HEAD]            close with evidence; refuses on open
+                                     steps/questions; closed is terminal
 drop <id> --why "..."                close as won't-do (files never deleted);
      [--duplicate-of|--superseded-by <id>]  names the survivor machine-visibly
 validate [--coverage] [--strict]     every invariant; exit 1 on violations

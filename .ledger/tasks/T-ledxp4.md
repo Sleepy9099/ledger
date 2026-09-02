@@ -1,10 +1,12 @@
 ---
 id: T-ledxp4
 title: Closed is terminal: done refuses every strict-CI-failing state; post-close mutations limited to an allowlist
-status: todo
+status: in_progress
 priority: p1
 size: s
 created: 2026-09-02T04:51:26Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T04:51:27Z
 tags: lifecycle, integrity
 ---
 
@@ -31,3 +33,4 @@ tags: lifecycle, integrity
 ## Log
 
 - 2026-09-02T04:51:26Z [claude-2026-09-01-b] add: created: Closed is terminal: done refuses every strict-CI-failing state; post-close mutations limited to an allowlist [p1/s] (tags: lifecycle, integrity)
+- 2026-09-02T04:51:27Z [claude-2026-09-01-b] claim: claimed

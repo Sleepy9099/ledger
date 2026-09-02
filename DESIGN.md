@@ -274,11 +274,17 @@ Notable semantics:
 - `claim` is advisory (real isolation is git branches); fresh foreign claims
   refuse without `--force`; stale ones log a takeover.
 - `done` is the only path to status done: auto-links `--commit` args and any
-  trailer-claimed commits, then requires ≥1 commit line OR `--no-code
-  "reason"`, and zero unanswered HUMAN questions (`--force` overrides). Warns
-  on unchecked steps / unanswered normal questions / still-open `depends_on`
-  (a dropped dependency counts as open — one reading of depends_on
-  tool-wide, shared with `next` and `drop`).
+  trailer-claimed commits, then REFUSES every state strict CI would reject
+  — no evidence (≥1 commit line OR `--no-code "reason"`), an unanswered
+  HUMAN question, an unchecked step, an unanswered question — so a closed
+  task can never be born red; `--force` overrides only the foreign-fresh-
+  claim guard. Warns on still-open `depends_on` (a dropped dependency
+  counts as open — one reading of depends_on tool-wide, shared with `next`
+  and `drop`; deliberately not a validate check). Closed is terminal: after
+  done/drop only `note`, `link`, `step check` and `question resolve`
+  (append-only or repair-only) are accepted; `set`, `step add/uncheck`,
+  `question add`, `block`, `claim`, `release` refuse with `bad-state` —
+  a regression or redo is a new task.
 - `set --add-depends` refuses self-references and cycles at write time.
 - `add` warns, never refuses, when the new title is token-overlap-similar
   to an existing one (`similar-task`, warning tier in the command envelope;
@@ -582,8 +588,10 @@ deterministic token-overlap hint; a model's opinion must never gate CI).
     the guarantee stricter.)
 12. **Close verb:** `done` (mirrors the status value exactly — one less name
     to remember; enum-verb symmetry beat 2-of-3 majority for `close`).
-    Closed is terminal: done/dropped are refused by every mutating verb; a
-    regression or redo is a new task (search first).
+    Closed is terminal (enforced 2026-09-02): `done` refuses every state
+    strict CI would reject, and after done/drop only the append-only or
+    repair-only verbs (note, link, step check, question resolve) are
+    accepted; a regression or redo is a new task (search first).
 13. **Done evidence:** ≥1 linked commit OR `--no-code "reason"`; a pytest
     node-id evidence vocabulary was cut (commits carry their tests).
 14. **Session identity:** flag > env > git user.name — a mandatory per-write
