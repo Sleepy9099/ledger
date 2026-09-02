@@ -261,6 +261,15 @@ Notable semantics:
   on the flag, never on data. `show` keeps the full shape (`--brief` opts
   in). Host scripts that read `data.task.log` / `.spec` from `next` use
   `--full`.
+- Hard context budgets (2026-09-02): the mandatory payload must not scale
+  with the backlog. Every digest family (open steps, HUMAN questions, dead
+  ends, commits, dependents, recent Log) and every `next` list (`why`,
+  `blocked_on_human`, `stale_blocks`, `held`) is capped by a code constant
+  (`DIGEST_LIMITS` / `NEXT_LIMITS`), cut AFTER the existing sort so the
+  omitted rows are the least urgent, and reported under one uniform key —
+  `truncated: {field: {total, omitted, retrieve_with}}` — present only when
+  something was cut, naming the command that retrieves the rest. `--full`
+  and `show` stay unbounded: they are the explicit "everything" commands.
 - `next` eligibility: `todo` (plus `in_progress` with a stale claim, flagged
   as a takeover), all `depends_on` done, not blocked, size ≠ xl, no
   `resource:` tag leased by another task's fresh claim (§7(h); the why

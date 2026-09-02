@@ -988,3 +988,63 @@ def test_report_windows_actor_and_git_free_paths(repo, plain):
     before = repo.read(new)
     repo.j("report")
     assert repo.read(new) == before
+
+
+
+# --- hard context budgets (T-841lcp) -----------------------------------------
+
+def test_digest_families_are_bounded_with_truncation_metadata(repo):
+    tid = repo.add_task("Big task")
+    for i in range(30):
+        repo.j("step", tid, "add", f"step {i:02d}")
+    for i in range(12):
+        repo.j("question", tid, "add", f"decision {i:02d}?", "--human")
+    for i in range(13):
+        repo.j("note", tid, f"dead end {i:02d}", "--dead-end")
+    d = repo.j("brief", tid, "--last", "5")["data"]
+    assert len(d["steps_open"]) == 25 and d["steps_total"] == 30
+    assert [s["n"] for s in d["steps_open"]] == list(range(1, 26))
+    assert len(d["human_gated_questions"]) == 10
+    assert len(d["dead_ends"]) == 10 and len(d["recent_log"]) == 5
+    t = d["truncated"]
+    assert t["steps_open"] == {"total": 30, "omitted": 5,
+                               "retrieve_with": f"ledger show {tid} --json"}
+    assert t["human_gated_questions"]["omitted"] == 2
+    assert t["dead_ends"]["omitted"] == 3
+    assert t["recent_log"]["total"] == d["log_total"]
+    assert "--last" in t["recent_log"]["retrieve_with"]
+    r = repo.run("brief", tid)
+    assert "(+5 more: ledger show" in r.stdout
+    # nothing cut -> no truncated key at all
+    small = repo.add_task("Small task")
+    assert "truncated" not in repo.j("brief", small)["data"]
+    # show stays unbounded
+    assert len(repo.j("show", tid)["data"]["next_steps"]) == 30
+
+
+def test_next_lists_are_bounded_and_full_is_not(repo):
+    blocked = []
+    for i in range(35):
+        prio = "p1" if i < 30 else "p3"
+        t = repo.add_task(f"Gate {i:02d}", "-p", prio)
+        repo.j("block", t, "--on", "human")
+        blocked.append((t, prio))
+    d = repo.j("next")["data"]
+    assert d["task"] is None
+    assert len(d["why"]) == 30 and len(d["blocked_on_human"]) == 20
+    assert d["truncated"]["why"] == {
+        "total": 35, "omitted": 5,
+        "retrieve_with": "ledger list --status todo --status blocked "
+                         "--status in_progress --json"}
+    assert d["truncated"]["blocked_on_human"]["omitted"] == 15
+    assert "questions --human" in d["truncated"]["blocked_on_human"][
+        "retrieve_with"]
+    kept = {w["id"] for w in d["why"]}
+    assert all(prio == "p1" for t, prio in blocked if t in kept)  # least urgent cut
+    r = repo.run("next")
+    assert "(+5 more: ledger list" in r.stdout
+    full = repo.j("next", "--full")["data"]
+    assert len(full["why"]) == 35 and "truncated" not in full
+    free = repo.add_task("Eligible", "-p", "p0")
+    d = repo.j("next")["data"]
+    assert d["task"]["header"]["id"] == free and "truncated" in d

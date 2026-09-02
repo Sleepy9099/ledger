@@ -1241,6 +1241,31 @@ def task_full(ctx: Ctx, task: Task, trailer_map: dict | None = None,
     }
 
 
+# Hard context budgets: the mandatory payload must not scale with the
+# backlog. Rows are cut AFTER the existing sort (least urgent go first) and
+# every cut is reported under one uniform key — truncated: {field: {total,
+# omitted, retrieve_with}} — naming the command that fetches the rest.
+DIGEST_LIMITS = {"steps_open": 25, "human_gated_questions": 10,
+                 "dead_ends": 10, "commits": 10, "dependents": 20}
+NEXT_LIMITS = {"why": 30, "blocked_on_human": 20, "stale_blocks": 20,
+               "held": 20}
+
+
+def bounded(rows: list, limit: int | None,
+            retrieve_with: str) -> tuple[list, dict | None]:
+    rows = list(rows)
+    if limit is None or len(rows) <= limit:
+        return rows, None
+    keep = max(limit, 0)
+    return rows[:keep], {"total": len(rows), "omitted": len(rows) - keep,
+                         "retrieve_with": retrieve_with}
+
+
+def truncation_lines(truncated: dict) -> list[str]:
+    return [f"  {name}: (+{m['omitted']} more: {m['retrieve_with']})"
+            for name, m in truncated.items()]
+
+
 def task_digest(ctx: Ctx, task: Task, last: int = 10,
                 trailer_map: dict | None = None,
                 all_tasks: list | None = None) -> dict:
@@ -1267,25 +1292,48 @@ def task_digest(ctx: Ctx, task: Task, last: int = 10,
     if all_tasks is None:
         all_tasks, _ = load_all_tasks(ctx)
     spec = task.get_section("Spec")
-    return {
+    truncated: dict = {}
+
+    def cap(name: str, rows: list, retrieve_with: str) -> list:
+        kept, meta = bounded(rows, DIGEST_LIMITS[name], retrieve_with)
+        if meta:
+            truncated[name] = meta
+        return kept
+
+    show_cmd = f"ledger show {task.id} --json"
+    keep = max(last, 0)
+    recent = log[-keep:] if keep else []
+    if len(log) > keep:
+        truncated["recent_log"] = {
+            "total": len(log), "omitted": len(log) - keep,
+            "retrieve_with": f"ledger brief {task.id} --last {len(log)} --json"}
+    out = {
         "header": {k: task.header.get(k) for k in HEADER_ORDER
                    if k in task.header},
         "path": str(task.path) if task.path else None,
-        "steps_open": [s for s in steps if not s["done"]],
+        "steps_open": cap("steps_open", [s for s in steps if not s["done"]],
+                          show_cmd),
         "steps_total": len(steps),
         "steps_done": sum(1 for s in steps if s["done"]),
-        "human_gated_questions": human_gated,
+        "human_gated_questions": cap("human_gated_questions", human_gated,
+                                     show_cmd),
         "open_questions": sum(1 for q in questions if not q["answered"]),
-        "recent_log": log[-last:] if last > 0 else [],
+        "recent_log": recent,
         "log_total": len(log),
-        "dead_ends": [e for e in log if e["verb"] == "note(dead-end)"],
-        "commits": task.commits(),
+        "dead_ends": cap("dead_ends",
+                         [e for e in log if e["verb"] == "note(dead-end)"],
+                         show_cmd),
+        "commits": cap("commits", task.commits(), show_cmd),
         "effective_commits": effective,
         "closed_relation": task.closed_relation(),
-        "dependents": dependents_of(task, all_tasks),
+        "dependents": cap("dependents", dependents_of(task, all_tasks),
+                          f"ledger list --depends-on {task.id} --json"),
         "last_activity": task.last_activity(),
         "spec_lines": len(spec.split("\n")) if spec else 0,
     }
+    if truncated:
+        out["truncated"] = truncated
+    return out
 
 
 def digest_human(d: dict) -> list[str]:
@@ -1310,6 +1358,7 @@ def digest_human(d: dict) -> list[str]:
     out.append(f"  commits: {', '.join(d['effective_commits']) or '(none)'}"
                f"; dependents: {', '.join(d['dependents']) or '(none)'}"
                f"; last activity {d['last_activity']}")
+    out.extend(truncation_lines(d.get("truncated", {})))
     return out
 
 
@@ -1896,16 +1945,37 @@ def cmd_next(args) -> int:
                 + (f", stale" if h["stale"] else "")
                 + f"] {h['title']}" for h in held]
 
+    # hard budgets on every list (--full is the explicit "everything")
+    full = getattr(args, "full", False)
+    truncated: dict = {}
+
+    def cap(name: str, rows: list, retrieve_with: str) -> list:
+        if full:
+            return list(rows)
+        kept, meta = bounded(rows, NEXT_LIMITS[name], retrieve_with)
+        if meta:
+            truncated[name] = meta
+        return kept
+
+    why = cap("why", why, "ledger list --status todo --status blocked "
+                          "--status in_progress --json")
+    human_blocked = cap("blocked_on_human", human_blocked,
+                        "ledger questions --human --json")
+    stale_blocks = cap("stale_blocks", stale_blocks,
+                       "ledger list --status blocked --json")
+
     if not eligible:
-        held = held_by_me(None)
-        emit(args, True, {"task": None, "claimed": False, "why": why,
-                          "blocked_on_human": human_blocked,
-                          "stale_blocks": stale_blocks, "held": held,
-                          "resources_held": resources_held},
-             errors=problems,
+        held = cap("held", held_by_me(None), "ledger list --mine --json")
+        data = {"task": None, "claimed": False, "why": why,
+                "blocked_on_human": human_blocked,
+                "stale_blocks": stale_blocks, "held": held,
+                "resources_held": resources_held}
+        if truncated:
+            data["truncated"] = truncated
+        emit(args, True, data, errors=problems,
              human=["nothing eligible"] +
                    [f"  {w['id']}: {w['ineligible_because']}" for w in why]
-                   + held_lines(held))
+                   + held_lines(held) + truncation_lines(truncated))
         return 0
     top, flag = eligible[0]
     claimed = False
@@ -1917,7 +1987,7 @@ def cmd_next(args) -> int:
         apply_claim(top, ctx.actor, takeover)
         save_task(top)
         claimed = True
-    held = held_by_me(top.id)
+    held = cap("held", held_by_me(top.id), "ledger list --mine --json")
     # the digest is the DEFAULT here: this is the one command every session
     # runs, and the protocol already requires reading the task file, so the
     # full Log would enter context twice. --full restores task_full; the
@@ -1934,6 +2004,8 @@ def cmd_next(args) -> int:
             "why": why, "blocked_on_human": human_blocked,
             "stale_blocks": stale_blocks, "held": held,
             "resources_held": resources_held}
+    if truncated:
+        data["truncated"] = truncated
     if args.n > 1:
         data["tasks"] = [task_brief(t) for t, _ in eligible[:args.n]]
     verb = "claimed" if claimed else "next"
@@ -1944,7 +2016,7 @@ def cmd_next(args) -> int:
                + [f"  stale block: {s['id']} blocked_on {s['blocked_on']} "
                   f"({s['target_status']}) — ledger unblock {s['id']}"
                   for s in stale_blocks]
-               + held_lines(held))
+               + held_lines(held) + truncation_lines(truncated))
     return 0
 
 

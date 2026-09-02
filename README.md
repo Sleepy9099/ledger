@@ -97,8 +97,9 @@ add "title" -p p1 -s m --spec -      create a task (spec via stdin);
     [--after <id>] [--tag t]         --after = scheduler-visible dependency;
                                      warns (never refuses) on similar titles
 brief <id> [--last N]                bounded digest: open steps, HUMAN
-                                     questions, dead ends, recent Log (only
-                                     the Log is capped; Spec = read the file)
+                                     questions, dead ends, recent Log — every
+                                     family capped; `truncated` says what was
+                                     cut and how to fetch it (Spec = the file)
 show <id> | list [--status ...]      read state (any unique id fragment works;
 list --depends-on <id> [--tag wave]  show carries dependents; this is the
                                      reverse lookup, e.g. which wave held T-x)
