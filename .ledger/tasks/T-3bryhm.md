@@ -1,12 +1,11 @@
 ---
 id: T-3bryhm
 title: add: non-blocking warning on similar existing task titles
-status: in_progress
+status: done
 priority: p2
 size: s
 created: 2026-09-01T23:48:39Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T01:31:04Z
+closed: 2026-09-02T01:36:50Z
 tags: discovery
 ---
 
@@ -54,6 +53,8 @@ Output is additive; files are byte-identical to what older copies would write; o
 
 ## Commits
 
+- 5d6283e 2026-09-01 add warns on similar existing titles; scan reports similar open pairs
+
 ## Log
 
 - 2026-09-01T23:48:39Z [claude-2026-09-01-a] add: created: add: non-blocking warning on similar existing task titles
@@ -66,3 +67,5 @@ Output is additive; files are byte-identical to what older copies would write; o
 - 2026-09-02T01:36:37Z [claude-2026-09-01-b] step: checked 'Candidate scoring in cmd_add; similar-task warnings (CLI-only code) + data.similar'
 - 2026-09-02T01:36:37Z [claude-2026-09-01-b] step: checked 'DESIGN §5 bullet and §11 'semantic/LLM-based deduplication' entry; tests incl. the validate-strict boundary'
 - 2026-09-02T01:36:37Z [claude-2026-09-01-b] note: scan evaluated and adopted as the advisory cross-branch home: scan --json now reports similar_open_pairs (same scoring, open tasks only, capped at 20) so the post-merge ritual surfaces duplicates minted on concurrent branches; never in validate
+- 2026-09-02T01:36:50Z [claude-2026-09-01-b] link: 5d6283e add warns on similar existing titles; scan reports similar open pairs
+- 2026-09-02T01:36:50Z [claude-2026-09-01-b] done: evidence: 5d6283e
