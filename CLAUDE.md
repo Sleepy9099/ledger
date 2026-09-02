@@ -46,7 +46,8 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 - `ledger done <id> --commit HEAD` — it refuses without commit evidence
   or with unanswered HUMAN questions. That refusal is correct; fix the
   reasons it reports, do not --force it. Task turned out unnecessary?
-  `ledger drop <id> --why "..."`.
+  `ledger drop <id> --why "..."` — a duplicate uses
+  `ledger drop <id> --duplicate-of <survivor>` so tooling can follow it.
 
 ## Session end — never skip, even out of context budget
 

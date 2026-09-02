@@ -297,3 +297,75 @@ def test_every_command_emits_envelope(repo):
         r = repo.run(*call, "--json")
         payload = json.loads(r.stdout)
         assert set(payload.keys()) == {"ok", "data", "errors"}, call
+
+
+# --- drop relations (T-71aehi) ----------------------------------------------
+
+def test_drop_duplicate_of_records_machine_visible_relation(repo):
+    survivor = repo.add_task("Canonical work")
+    dupe = repo.add_task("Same work filed twice")
+    d = repo.j("drop", dupe, "--duplicate-of", survivor, "--why", "same thing")
+    assert d["ok"]
+    assert d["data"]["closed_relation"] == {"kind": "duplicate",
+                                            "target": survivor}
+    text = repo.read(dupe)
+    assert f"drop: duplicate-of {survivor} — same thing" in text
+    show = repo.j("show", dupe)["data"]
+    assert show["header"]["status"] == "dropped"
+    assert show["closed_relation"] == {"kind": "duplicate", "target": survivor}
+    # the reverse view is derived on read; the survivor's file was not written
+    assert repo.j("show", survivor)["data"]["absorbed"] == [
+        {"id": dupe, "kind": "duplicate"}]
+    assert "drop" not in repo.read(survivor)
+    rows = repo.j("list", "--status", "dropped")["data"]["tasks"]
+    assert rows[0]["closed_relation"]["target"] == survivor
+    assert repo.j("validate", "--no-git", "--strict")["ok"]
+
+
+def test_drop_superseded_by_without_why(repo):
+    old = repo.add_task("Old approach")
+    new = repo.add_task("New approach")
+    d = repo.j("drop", old, "--superseded-by", new)
+    assert d["data"]["closed_relation"] == {"kind": "superseded", "target": new}
+    assert f"drop: superseded-by {new}\n" in repo.read(old)
+    r = repo.run("drop", repo.add_task("Human readable"), "--superseded-by",
+                 new)
+    assert "as superseded by" in r.stdout
+
+
+def test_drop_relation_refusals_leave_files_untouched(repo):
+    a = repo.add_task("Alpha")
+    b = repo.add_task("Beta")
+    gone = repo.add_task("Already dropped")
+    repo.j("drop", gone, "--why", "gone")
+    before = repo.read(a)
+    both = repo.j("drop", a, "--duplicate-of", b, "--superseded-by", b,
+                  expect=3)
+    assert both["errors"][0]["code"] == "usage"
+    assert repo.run("drop", a).returncode == 3  # neither --why nor a relation
+    assert repo.j("drop", a, "--duplicate-of", a, expect=2)["errors"][0][
+        "code"] == "refs"
+    dropped_target = repo.j("drop", a, "--duplicate-of", gone, expect=2)
+    assert dropped_target["errors"][0]["code"] == "bad-state"
+    assert "survivor" in dropped_target["errors"][0]["fix_hint"]
+    assert repo.j("drop", a, "--duplicate-of", "zzzzzz", expect=2)["errors"][
+        0]["code"] == "no-such-task"
+    assert repo.j("drop", a, "--duplicate-of", "T-", expect=2)["errors"][0][
+        "code"] == "ambiguous-id"
+    hand_typed = repo.j("drop", a, "--why", f"duplicate-of {b} — typed",
+                        expect=2)
+    assert hand_typed["errors"][0]["code"] == "refs"
+    assert repo.read(a) == before  # every refusal happened before any write
+    # a done target is a legitimate survivor
+    repo.j("done", b, "--no-code", "finished")
+    assert repo.j("drop", a, "--duplicate-of", b)["ok"]
+
+
+def test_drop_why_with_newlines_still_parses_relation(repo):
+    survivor = repo.add_task("Survivor")
+    dupe = repo.add_task("Dupe")
+    repo.j("drop", dupe, "--duplicate-of", survivor, "--why",
+           "line one\nline two")
+    rel = repo.j("show", dupe)["data"]["closed_relation"]
+    assert rel == {"kind": "duplicate", "target": survivor}
+    assert "line one; line two" in repo.read(dupe)

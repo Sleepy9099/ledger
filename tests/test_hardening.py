@@ -469,3 +469,25 @@ def test_unicode_prefix_tamper_detection(tmp_path, base_env):
     payload = json.loads(r.stdout)
     assert any(e["code"] == "log-tamper" and "deleted" in e["message"]
                for e in payload["errors"]), payload["errors"]
+
+
+# --- drop relations downstream (T-71aehi) ----------------------------------
+
+def test_drop_relation_repoints_dependents_and_next_why(repo):
+    survivor = repo.add_task("Survivor")
+    dupe = repo.add_task("Dupe")
+    child = repo.j("add", "Child", "--after", dupe)["data"]["id"]
+    d = repo.j("drop", dupe, "--duplicate-of", survivor)
+    warn = [e for e in d["errors"] if e.get("task") == child]
+    assert warn and warn[0]["fix_hint"] == (
+        f"ledger set {child} --remove-depends {dupe} --add-depends {survivor}")
+    why = {w["id"]: w["ineligible_because"]
+           for w in repo.j("next")["data"]["why"]}
+    assert f"{dupe} (dropped, duplicate-of {survivor})" in why[child]
+    # the dependent IS the survivor: no self-dependency is suggested
+    other = repo.add_task("Other")
+    sl = repo.j("add", "Survivor-like", "--after", other)["data"]["id"]
+    d = repo.j("drop", other, "--superseded-by", sl)
+    warn = [e for e in d["errors"] if e.get("task") == sl]
+    assert warn and warn[0]["fix_hint"] == (
+        f"ledger set {sl} --remove-depends {other}")

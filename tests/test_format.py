@@ -135,3 +135,29 @@ def test_crlf_input_normalized_on_parse(ledger_mod):
     task, problems = ledger_mod.parse_task(CANONICAL.replace("\n", "\r\n"))
     assert problems == []
     assert ledger_mod.serialize_task(task) == CANONICAL
+
+
+def test_closed_relation_grammar_roundtrip_and_prose_is_not_a_relation(ledger_mod):
+    text = CANONICAL.replace(
+        "status: in_progress\n", "status: dropped\n").replace(
+        "claimed_by: claude-2026-08-27-a\nclaimed_at: 2026-08-27T14:03:22Z\n",
+        "closed: 2026-08-28T10:00:00Z\n").replace(
+        "- 2026-08-27T14:03:22Z [claude-2026-08-27-a] claim: resuming, "
+        "picking up backoff loop\n",
+        "- 2026-08-28T10:00:00Z [ej] drop: duplicate-of T-77be04 — same fix\n")
+    task, problems = ledger_mod.parse_task(text)
+    assert problems == []
+    assert ledger_mod.serialize_task(task) == text
+    assert task.closed_relation() == {"kind": "duplicate", "target": "T-77be04"}
+    # the historical free-text phrasing is prose, not a machine relation
+    prose = text.replace("drop: duplicate-of T-77be04 — same fix",
+                         "drop: superseded by new design")
+    task, _ = ledger_mod.parse_task(prose)
+    assert task.closed_relation() is None
+    # two drop lines sharing the newest timestamp that disagree -> None
+    torn = text.replace(
+        "- 2026-08-28T10:00:00Z [ej] drop: duplicate-of T-77be04 — same fix\n",
+        "- 2026-08-28T10:00:00Z [ej] drop: duplicate-of T-77be04 — same fix\n"
+        "- 2026-08-28T10:00:00Z [other] drop: superseded-by T-000000\n")
+    task, _ = ledger_mod.parse_task(torn)
+    assert task.closed_relation() is None

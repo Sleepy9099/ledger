@@ -104,7 +104,12 @@ There is **no `updated` field** — it would conflict on every concurrent edit.
   `- <UTC-ISO> [<actor>] <verb>: <text>`. Verbs: add claim release note step
   question answer link block unblock set done done(no-code) drop. Lines are
   self-contained, timestamped, actor-tagged, and order-insensitive — any
-  merge interleaving is semantically correct.
+  merge interleaving is semantically correct. One CLI-authored sub-grammar
+  lives inside a `drop:` line's text: `duplicate-of T-x — why` /
+  `superseded-by T-x — why` (written only by `drop --duplicate-of` /
+  `--superseded-by`, target validated at write time) — the machine-visible
+  "where did this work go" relation, read back as `closed_relation` /
+  `absorbed` with no header key, verb or status added.
 
 ## 3. Ledger semantics: how history/audit is kept
 
@@ -187,6 +192,13 @@ Notable semantics:
   "reason"`, and zero unanswered HUMAN questions (`--force` overrides). Warns
   on unchecked steps / unanswered normal questions.
 - `set --add-depends` refuses self-references and cycles at write time.
+- `drop --duplicate-of <id>` / `--superseded-by <id>` close a task while
+  naming its survivor: the relation is one Log line (§2), never a header
+  field, and the reverse view (`show <survivor>` → `absorbed`) is derived on
+  read, so the survivor's file is never written. A dropped dependency then
+  shows as `T-y (dropped, duplicate-of T-x)` in `next`'s `why`, and `drop`'s
+  dependents warning hints the re-point (`--remove-depends T-y
+  --add-depends T-x`). Diagnostic only: the target is not covered by `refs`.
 - Structurally broken files (bad-merge duplicate keys/sections, preamble)
   are read-only: every mutating command refuses them (exit 2, `corrupt-file`)
   until repaired, so a routine `note` can never launder away the other merge

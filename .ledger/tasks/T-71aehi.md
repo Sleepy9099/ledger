@@ -1,10 +1,12 @@
 ---
 id: T-71aehi
 title: drop --duplicate-of / --superseded-by: machine-visible closed relations
-status: todo
+status: in_progress
 priority: p2
 size: s
 created: 2026-09-01T23:48:39Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T00:35:13Z
 tags: discovery, ontology
 ---
 
@@ -39,10 +41,10 @@ Older validators parse the line as an ordinary `drop` event; `closed_relation` i
 
 ## Next Steps
 
-- [ ] cmd_drop flags, refusals before any write, CLI-authored Log grammar with the block-style separator
-- [ ] Task.closed_relation() (max-timestamp rule) + closed_relation in task_brief/task_full + absorbed in show
-- [ ] Downstream hints (drop dependents fix_hint, next why text), human line, docs (README, DESIGN §2/§5, PROTOCOL_TEXT drop line via init)
-- [ ] Tests in test_cli/test_hardening/test_format/test_property
+- [x] cmd_drop flags, refusals before any write, CLI-authored Log grammar with the block-style separator
+- [x] Task.closed_relation() (max-timestamp rule) + closed_relation in task_brief/task_full + absorbed in show
+- [x] Downstream hints (drop dependents fix_hint, next why text), human line, docs (README, DESIGN §2/§5, PROTOCOL_TEXT drop line via init)
+- [x] Tests in test_cli/test_hardening/test_format/test_property
 
 ## Open Questions
 
@@ -55,3 +57,8 @@ Older validators parse the line as an ordinary `drop` event; `closed_relation` i
 - 2026-09-01T23:48:43Z [claude-2026-09-01-a] step: added 'Task.closed_relation() (max-timestamp rule) + closed_relation in task_brief/task_full + absorbed in show'
 - 2026-09-01T23:48:43Z [claude-2026-09-01-a] step: added 'Downstream hints (drop dependents fix_hint, next why text), human line, docs (README, DESIGN §2/§5, PROTOCOL_TEXT drop line via init)'
 - 2026-09-01T23:48:44Z [claude-2026-09-01-a] step: added 'Tests in test_cli/test_hardening/test_format/test_property'
+- 2026-09-02T00:35:13Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T00:43:25Z [claude-2026-09-01-b] step: checked 'cmd_drop flags, refusals before any write, CLI-authored Log grammar with the block-style separator'
+- 2026-09-02T00:43:25Z [claude-2026-09-01-b] step: checked 'Task.closed_relation() (max-timestamp rule) + closed_relation in task_brief/task_full + absorbed in show'
+- 2026-09-02T00:43:25Z [claude-2026-09-01-b] step: checked 'Downstream hints (drop dependents fix_hint, next why text), human line, docs (README, DESIGN §2/§5, PROTOCOL_TEXT drop line via init)'
+- 2026-09-02T00:43:26Z [claude-2026-09-01-b] step: checked 'Tests in test_cli/test_hardening/test_format/test_property'

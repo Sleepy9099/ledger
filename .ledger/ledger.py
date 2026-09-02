@@ -63,6 +63,13 @@ COMMIT_LINE_RE = re.compile(r"^- ([0-9a-f]{7,40}) (\d{4}-\d{2}-\d{2}) (.*)$")
 CHECKBOX_RE = re.compile(r"^- \[([ x])\] (.*)$")
 LOOSE_BOX_RE = re.compile(r"^\s*[-*+]\s*\[[^\]]{0,2}\]")
 ANSWERED_RE = re.compile(r"^(.*?) -- ANSWERED \((\d{4}-\d{2}-\d{2})\): (.*)$")
+# CLI-authored sub-grammar of a `drop:` Log line: `duplicate-of T-x — why`.
+# The hyphenated token is not natural English, so a historical free-text
+# `--why "duplicate of T-x"` is never reinterpreted as a machine relation.
+CLOSED_RELATION_RE = re.compile(
+    r"^(duplicate-of|superseded-by) (\S+)(?: — (.*))?$")
+CLOSED_RELATION_KIND = {"duplicate-of": "duplicate", "superseded-by": "superseded"}
+CLOSED_RELATION_TOKEN = {v: k for k, v in CLOSED_RELATION_KIND.items()}
 TRAILER_RE = re.compile(r"^(Ledger-Task|Ledger-Exempt):[ \t]*(.+?)[ \t]*$", re.M)
 CONFLICT_RE = re.compile(r"^(<{7}|={7}|>{7}|\|{7})( |$)")
 ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -152,7 +159,8 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 - `ledger done <id> --commit HEAD` — it refuses without commit evidence
   or with unanswered HUMAN questions. That refusal is correct; fix the
   reasons it reports, do not --force it. Task turned out unnecessary?
-  `ledger drop <id> --why "..."`.
+  `ledger drop <id> --why "..."` — a duplicate uses
+  `ledger drop <id> --duplicate-of <survivor>` so tooling can follow it.
 
 ## Session end — never skip, even out of context budget
 
@@ -345,6 +353,31 @@ class Task:
                 out.append({"ts": m.group(1), "actor": m.group(2),
                             "verb": m.group(3), "text": m.group(4)})
         return out
+
+    def closed_relation(self) -> dict | None:
+        """{"kind": "duplicate"|"superseded", "target": id} from the newest
+        `drop:` Log line that carries the CLI-authored relation grammar.
+
+        Newest by TIMESTAMP, never by line position (Log lines are
+        order-insensitive under merges); two lines sharing the maximum
+        timestamp that disagree yield None. Diagnostic only — the target is
+        not covered by the refs check and may itself have closed since.
+        """
+        drops = [e for e in self.log() if e["verb"] == "drop"]
+        if not drops:
+            return None
+        newest = max(e["ts"] for e in drops)
+        found: list[dict | None] = []
+        for e in drops:
+            if e["ts"] != newest:
+                continue
+            m = CLOSED_RELATION_RE.match(e["text"])
+            found.append({"kind": CLOSED_RELATION_KIND[m.group(1)],
+                          "target": m.group(2)} if m else None)
+        first = found[0]
+        if any(f != first for f in found):
+            return None
+        return first
 
     def last_activity(self) -> str:
         candidates = [self.header.get("created", ""),
@@ -962,6 +995,7 @@ def task_brief(task: Task) -> dict:
         "open_steps": sum(1 for s in task.steps() if not s["done"]),
         "open_questions": sum(1 for q in task.questions() if not q["answered"]),
         "commits": len(task.commits()),
+        "closed_relation": task.closed_relation(),
     }
 
 
@@ -979,9 +1013,21 @@ def task_full(ctx: Ctx, task: Task, trailer_map: dict | None = None) -> dict:
         "commits": task.commits(),
         "log": task.log(),
         "effective_commits": effective,
+        "closed_relation": task.closed_relation(),
         "last_activity": task.last_activity(),
         "path": str(task.path) if task.path else None,
     }
+
+
+def absorbed_by(task: Task, all_tasks: list[Task]) -> list[dict]:
+    """Every task whose closed relation targets this one — the reverse view,
+    derived on read so the survivor's file is never written."""
+    out = []
+    for other in sorted(all_tasks, key=sort_key):
+        rel = other.closed_relation()
+        if rel and rel["target"] == task.id:
+            out.append({"id": other.id, "kind": rel["kind"]})
+    return out
 
 
 def trailer_links(ctx: Ctx) -> dict[str, list[str]]:
@@ -1017,6 +1063,19 @@ def claim_is_stale(task: Task, stale_days: int) -> bool:
     return datetime.now(timezone.utc) - dt > timedelta(days=stale_days)
 
 
+def _dep_status_text(dep: str, by_id: dict[str, Task]) -> str:
+    """`T-x (todo)`; a dropped dependency also names where its work went:
+    `T-x (dropped, duplicate-of T-y)` so the re-point is one read away."""
+    if dep not in by_id:
+        return f"{dep} (missing)"
+    task = by_id[dep]
+    rel = task.closed_relation() if task.status == "dropped" else None
+    if rel:
+        return (f"{dep} ({task.status}, "
+                f"{CLOSED_RELATION_TOKEN[rel['kind']]} {rel['target']})")
+    return f"{dep} ({task.status})"
+
+
 def compute_eligible(tasks: list[Task], config: dict):
     """Returns (eligible, why, blocked_on_human).
 
@@ -1046,9 +1105,7 @@ def compute_eligible(tasks: list[Task], config: dict):
             flag = "stale_claim"  # still subject to the gates below
         missing = [d for d in task.depends_on if d not in done_ids]
         if missing:
-            details = ", ".join(
-                f"{d} ({by_id[d].status if d in by_id else 'missing'})"
-                for d in missing)
+            details = ", ".join(_dep_status_text(d, by_id) for d in missing)
             why.append({"id": task.id,
                         "ineligible_because": f"depends_on {details}"})
             continue
@@ -1265,9 +1322,14 @@ def cmd_show(args) -> int:
     ctx = make_ctx(args)
     task = load_task_or_die(ctx, args.id, for_write=False)
     data = task_full(ctx, task, trailer_links(ctx))
+    all_tasks, _ = load_all_tasks(ctx)
+    data["absorbed"] = absorbed_by(task, all_tasks)
     human = [serialize_task(task).rstrip("\n"), "",
              f"# last_activity: {data['last_activity']}",
              f"# effective_commits: {', '.join(data['effective_commits']) or '(none)'}"]
+    if data["absorbed"]:
+        human.append("# absorbed: " + ", ".join(
+            f"{a['id']} ({a['kind']})" for a in data["absorbed"]))
     emit(args, True, data, human=human)
     return 0
 
@@ -1830,28 +1892,77 @@ def cmd_done(args) -> int:
 
 def cmd_drop(args) -> int:
     ctx = make_ctx(args, mutating=True)
+    # every refusal below is evaluated BEFORE the first save: a refused drop
+    # leaves no file changed
+    if args.duplicate_of and args.superseded_by:
+        raise LedgerError("usage", "--duplicate-of and --superseded-by are "
+                          "mutually exclusive", exit_code=3,
+                          fix_hint="a task is either a duplicate of a live "
+                                   "task or replaced by a new one")
+    why = sanitize_inline(args.why) if args.why else ""
+    kind = ("duplicate" if args.duplicate_of
+            else "superseded" if args.superseded_by else None)
+    if kind is None and not why:
+        raise LedgerError("usage", "drop needs --why, --duplicate-of <id> "
+                          "or --superseded-by <id>", exit_code=3)
     task = load_task_or_die(ctx, args.id, for_write=True)
     if task.status in ("done", "dropped"):
         raise LedgerError("bad-state", f"{task.id} is already {task.status}",
                           task=task.id)
     _guard_foreign_claim(ctx, task, args.force, "closing")
+    if kind is None and CLOSED_RELATION_RE.match(why):
+        raise LedgerError(
+            "refs", "--why carries the drop-relation grammar "
+            f"({why.split(' ')[0]} ...) without the flag", task=task.id,
+            fix_hint="use --duplicate-of <id> / --superseded-by <id> so the "
+                     "target is resolved and validated")
+    target = None
+    if kind is not None:
+        target = load_task_or_die(ctx, args.duplicate_of or args.superseded_by,
+                                  for_write=False)
+        if target.id == task.id:
+            raise LedgerError("refs", f"{task.id} cannot be a {kind} of "
+                              "itself", task=task.id)
+        if target.status == "dropped":
+            raise LedgerError(
+                "bad-state", f"{target.id} is itself dropped", task=task.id,
+                fix_hint="point at the live survivor (follow "
+                         f"{target.id}'s closed_relation)")
     task.header["status"] = "dropped"
     task.header["closed"] = now_ts()
     task.header.pop("claimed_by", None)
     task.header.pop("claimed_at", None)
     task.header.pop("blocked_on", None)
-    task.append_log(ctx.actor, "drop", args.why)
+    if target is not None:
+        text = f"{CLOSED_RELATION_TOKEN[kind]} {target.id}"
+        if why:
+            text += f" — {why}"
+    else:
+        text = why
+    task.append_log(ctx.actor, "drop", text)
     save_task(task)
     all_tasks, _ = load_all_tasks(ctx)
-    warnings = [
-        err("refs",
+    warnings = []
+    for t in all_tasks:
+        if task.id not in t.depends_on or t.status not in OPEN_STATUSES:
+            continue
+        hint = f"ledger set {t.id} --remove-depends {task.id}"
+        if target is not None and t.id != target.id:
+            hint += f" --add-depends {target.id}"
+        warnings.append(err(
+            "refs",
             f"{t.id} depends_on {task.id}, which is now dropped — it will "
             "never become eligible", task=t.id, severity="warning",
-            fix_hint=f"ledger set {t.id} --remove-depends {task.id}")
-        for t in all_tasks
-        if task.id in t.depends_on and t.status in OPEN_STATUSES]
-    emit(args, True, {"id": task.id}, errors=warnings,
-         human=[f"dropped {task.id}: {args.why}"])
+            fix_hint=hint))
+    if target is not None:
+        relation = ("duplicate of" if kind == "duplicate" else "superseded by")
+        human = f"dropped {task.id} as {relation} {target.id}"
+        if why:
+            human += f": {why}"
+    else:
+        human = f"dropped {task.id}: {why}"
+    emit(args, True, {"id": task.id, "closed_relation": task.closed_relation()},
+         errors=warnings, human=[human])
     return 0
 
 
@@ -2238,7 +2349,10 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
             violations.append(err(
                 "trailer-dangling",
                 f"commit {c.sha7} trailer names unknown task id '{tid}'",
-                fix_hint="fix the id with ledger link, or add the missing task"))
+                fix_hint=f"'{tid}' is in {c.sha7}'s MESSAGE, so ledger "
+                         "link cannot change it: rewrite the message with "
+                         "a real id, or restore the task file that "
+                         "carried it"))
         if bucket == "exempt":
             exempt_count += 1
         elif bucket == "unlinked":
@@ -2246,8 +2360,13 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
                 "coverage",
                 f"commit {c.sha7} ('{c.subject}') has no Ledger-Task/"
                 "Ledger-Exempt trailer",
-                fix_hint="repair with: ledger link <task-id> " + c.sha7
-                         + " — and use trailers going forward"))
+                fix_hint="put a Ledger-Task/Ledger-Exempt trailer in the "
+                         "message's LAST paragraph — a blank line before "
+                         "Co-Authored-By puts it out of scope. Rewrite "
+                         "the MESSAGE: git commit --amend if " + c.sha7
+                         + " is HEAD. ledger link does NOT clear this — "
+                         "it writes ## Commits, which this check never "
+                         "reads."))
     if commits:
         violations.append(err(
             "exempt-ratio",
@@ -2475,7 +2594,12 @@ def build_parser() -> Parser:
     p = sub.add_parser("drop", parents=[common],
                        help="close a task as won't-do")
     p.add_argument("id")
-    p.add_argument("--why", required=True)
+    p.add_argument("--why", help="reason (required unless a relation flag "
+                                 "is given)")
+    p.add_argument("--duplicate-of", metavar="ID",
+                   help="the live task that already covers this work")
+    p.add_argument("--superseded-by", metavar="ID",
+                   help="the task that replaces this one 1:1")
     p.add_argument("--force", action="store_true",
                    help="drop despite another session's fresh claim")
     p.set_defaults(fn=cmd_drop)

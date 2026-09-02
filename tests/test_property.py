@@ -54,7 +54,10 @@ def test_random_cli_sequences_never_corrupt(plain):
                   "--force")
 
     def op_drop():
-        plain.run("drop", any_id(), "--why", "synthetic drop")
+        if rng.random() < 0.5:  # self / dropped target may be refused: fine
+            plain.run("drop", any_id(), "--duplicate-of", any_id())
+        else:
+            plain.run("drop", any_id(), "--why", "synthetic drop")
 
     ops = [op_add, op_note, op_step, op_question, op_claim_release,
            op_block_unblock, op_set, op_depends, op_done, op_drop]
