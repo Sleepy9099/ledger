@@ -1,12 +1,11 @@
 ---
 id: T-a6qomg
 title: Speed up the test suite: run it in parallel (pytest-xdist) in CI and locally
-status: in_progress
+status: done
 priority: p3
 size: xs
 created: 2026-09-02T03:37:49Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T03:37:50Z
+closed: 2026-09-02T03:39:37Z
 tags: infra
 ---
 
@@ -33,7 +32,11 @@ An in-process CLI driver for the tests (would need to unwind the process-lifetim
 
 ## Commits
 
+- dde8d8b 2026-09-01 Run the test suite in parallel with pytest-xdist
+
 ## Log
 
 - 2026-09-02T03:37:49Z [claude-2026-09-01-b] add: created: Speed up the test suite: run it in parallel (pytest-xdist) in CI and locally [p3/xs] (tags: infra)
 - 2026-09-02T03:37:50Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T03:39:36Z [claude-2026-09-01-b] link: dde8d8b Run the test suite in parallel with pytest-xdist
+- 2026-09-02T03:39:37Z [claude-2026-09-01-b] done: evidence: dde8d8b
