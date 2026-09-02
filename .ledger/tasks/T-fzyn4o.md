@@ -1,12 +1,11 @@
 ---
 id: T-fzyn4o
 title: Decide: next --claim returns the digest shape by default
-status: in_progress
+status: done
 priority: p3
 size: xs
 created: 2026-09-01T23:48:40Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T02:02:53Z
+closed: 2026-09-02T02:08:45Z
 depends_on: T-z7iebd, T-2e587s
 tags: ergonomics, context, decision
 ---
@@ -40,6 +39,8 @@ Default payload has the digest keys and no `log`; `--full` has the `task_full` k
 
 ## Commits
 
+- 0030c40 2026-09-01 next returns the bounded digest by default; --full restores the full shape
+
 ## Log
 
 - 2026-09-01T23:48:40Z [claude-2026-09-01-a] add: created: Decide: next --claim returns the digest shape by default
@@ -55,3 +56,5 @@ Default payload has the digest keys and no `log`; `--full` has the `task_full` k
 - 2026-09-02T02:02:53Z [claude-2026-09-01-b] claim: claimed
 - 2026-09-02T02:02:54Z [claude-2026-09-01-b] step: checked 'Human answers; unblock or drop'
 - 2026-09-02T02:08:32Z [claude-2026-09-01-b] step: checked 'If approved: switch the default, add --full, update PROTOCOL_TEXT step 2, bump PROTOCOL_VERSION/TOOL_VERSION, re-run init'
+- 2026-09-02T02:08:45Z [claude-2026-09-01-b] link: 0030c40 next returns the bounded digest by default; --full restores the full shape
+- 2026-09-02T02:08:45Z [claude-2026-09-01-b] done: evidence: 0030c40
