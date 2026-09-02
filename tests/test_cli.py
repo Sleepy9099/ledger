@@ -20,7 +20,7 @@ def test_init_idempotent_and_bootstrap_files(repo):
     # the repair the protocol promises for a pushed commit is true (T-5z04ex)
     protocol = (ledger / "PROTOCOL.md").read_text(encoding="utf-8")
     for phrase in ("--add-depends", "not the action", "ready for integration",
-                   "not scope expansion", "ledger search"):
+                   "not scope expansion", "ledger search", "ledger brief"):
         assert phrase in protocol and phrase in claude  # T-w0emnj, T-ntt2zz
     assert "ledger link <id> <sha>" in protocol
     assert "explicit link counts as coverage" in protocol
@@ -316,7 +316,7 @@ def test_every_command_emits_envelope(repo):
         ("question", tid, "add", "q?"), ("claim", tid), ("release", tid),
         ("block", tid, "--on", "human"), ("unblock", tid),
         ("set", tid, "--priority", "p1"), ("scan",), ("validate",),
-        ("doctor",), ("search", "x"),
+        ("doctor",), ("search", "x"), ("brief", tid),
     ]
     for call in calls:
         r = repo.run(*call, "--json")
@@ -617,3 +617,71 @@ def test_dependents_and_list_depends_on(repo):
         "code"] == "no-such-task"
     assert repo.j("list", "--depends-on", "T-", expect=2)["errors"][0][
         "code"] == "ambiguous-id"
+
+
+
+# --- brief: the bounded digest (T-z7iebd) ------------------------------------
+
+def test_brief_digest_shape_and_bounds(repo):
+    tid = repo.j("add", "Long-running task", "--spec", "-",
+                 input="line 1\nline 2\nline 3\n")["data"]["id"]
+    for i in range(3):
+        repo.j("step", tid, "add", f"step {i + 1}")
+    repo.j("step", tid, "check", "1")
+    repo.j("question", tid, "add", "ship behind a flag?", "--human")
+    repo.j("question", tid, "add", "cache ttl?")
+    repo.j("question", tid, "resolve", "flag", "--answer", "yes",
+           "--session", "the-operator")
+    repo.j("note", tid, "regex route backtracks", "--dead-end")
+    for i in range(12):
+        repo.j("note", tid, f"breadcrumb {i}")
+    before = repo.task_file(tid).read_bytes()
+    d = repo.j("brief", tid, "--last", "3")["data"]
+    assert repo.task_file(tid).read_bytes() == before
+    assert d["header"]["id"] == tid and d["spec_lines"] == 3
+    assert [s["n"] for s in d["steps_open"]] == [2, 3]  # original indexes
+    assert d["steps_total"] == 3 and d["steps_done"] == 1
+    assert d["human_gated_questions"] == [{
+        "n": 1, "text": "ship behind a flag?", "answered": True,
+        "answer": "yes", "answered_by": "the-operator"}]
+    assert d["open_questions"] == 1
+    assert len(d["recent_log"]) == 3
+    assert d["log_total"] == 1 + 3 + 1 + 2 + 1 + 1 + 12  # every Log line
+    assert d["recent_log"][-1]["text"] == "breadcrumb 11"
+    assert all(e["ts"] >= d["recent_log"][0]["ts"] for e in d["recent_log"])
+    assert [e["text"] for e in d["dead_ends"]] == ["regex route backtracks"]
+    assert d["dependents"] == [] and d["commits"] == []
+    assert d["effective_commits"] == []
+    for key in ("spec", "log", "next_steps"):
+        assert key not in d  # bounded: the file is the Spec authority
+    r = repo.run("brief", tid)
+    assert "dead end: regex route backtracks" in r.stdout
+    assert "[ ] 2. step 2" in r.stdout
+
+
+def test_show_and_next_brief_flags(repo):
+    tid = repo.add_task("Digestible")
+    full = repo.j("show", tid)["data"]
+    assert "log" in full and "spec" in full
+    digest = repo.j("show", tid, "--brief")["data"]
+    assert "recent_log" in digest and "log" not in digest
+    assert "absorbed" in digest
+    assert repo.run("show", tid, "--last", "2").returncode == 3  # needs --brief
+    n = repo.j("next", "--brief", "-n", "3")["data"]
+    assert "recent_log" in n["task"] and "log" not in n["task"]
+    assert n["tasks"][0]["id"] == tid and "open_steps" in n["tasks"][0]
+    plain_next = repo.j("next")["data"]
+    assert "log" in plain_next["task"]
+
+
+def test_brief_effective_commits_without_git_walk(plain, repo):
+    p = plain.add_task("Plain tree")
+    d = plain.j("brief", p)["data"]
+    assert d["effective_commits"] == [] and d["commits"] == []
+    tid = repo.add_task("Trailer only")
+    (repo.root / "t.py").write_text("t\n", encoding="utf-8")
+    sha = repo.commit_all("Trailered work", (f"Ledger-Task: {tid}",))
+    d = repo.j("brief", tid)["data"]
+    assert d["commits"] == [] and d["effective_commits"] == [sha[:7]]
+    d = repo.j("brief", tid, "--no-git")["data"]
+    assert d["effective_commits"] == []

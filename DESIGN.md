@@ -197,8 +197,15 @@ Commands: `init`, `add`, `list`, `show`, `next [--claim]`, `claim [--force]`,
 `release [--blocked --on]`, `set`, `note`, `step add|check|uncheck`,
 `question add|resolve`, `questions [--human]`, `block --on` / `unblock`,
 `link`, `scan [--write]`, `done [--commit|--no-code|--force]`, `drop --why`,
-`validate [--coverage] [--strict] [--no-git]`, `doctor`, `search`. (Exact
-flags: `--help` or README.)
+`validate [--coverage] [--strict] [--no-git]`, `doctor`, `search`,
+`brief [--last N]` (also `show --brief` / `next --brief`: the bounded digest
+— open steps with their original indexes, HUMAN-gated questions with who
+answered, `note(dead-end)` entries uncapped, the N newest Log entries by
+timestamp, commits, dependents, a Spec LINE COUNT only so the one file read
+stays the authority; nothing between `list`'s counts and `show`'s
+everything existed before, and the review's §23 "bounded view" is the
+retrieval half of never-lossy Log handling). (Exact flags: `--help` or
+README.)
 
 Notable semantics:
 

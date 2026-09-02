@@ -1,10 +1,12 @@
 ---
 id: T-z7iebd
 title: ledger brief: bounded derived view of one task
-status: todo
+status: in_progress
 priority: p2
 size: s
 created: 2026-09-01T23:48:39Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T01:54:41Z
 tags: ergonomics, context
 ---
 
@@ -47,10 +49,10 @@ Task files untouched; a pre-brief vendored copy gives argparse exit 3 (T-2e587s 
 
 ## Next Steps
 
-- [ ] task_digest() over existing structured views; brief subcommand with --last/--no-git
-- [ ] --brief on show and next (replaces the task_full shape; -n rows unchanged)
-- [ ] Replace the PROTOCOL_TEXT step-2 clause; re-run init; README; DESIGN §5
-- [ ] Tests incl. envelope + lock-free lists, plain fixture, trailer-only effective_commits
+- [x] task_digest() over existing structured views; brief subcommand with --last/--no-git
+- [x] --brief on show and next (replaces the task_full shape; -n rows unchanged)
+- [x] Replace the PROTOCOL_TEXT step-2 clause; re-run init; README; DESIGN §5
+- [x] Tests incl. envelope + lock-free lists, plain fixture, trailer-only effective_commits
 
 ## Open Questions
 
@@ -64,3 +66,8 @@ Task files untouched; a pre-brief vendored copy gives argparse exit 3 (T-2e587s 
 - 2026-09-01T23:48:44Z [claude-2026-09-01-a] step: added 'Replace the PROTOCOL_TEXT step-2 clause; re-run init; README; DESIGN §5'
 - 2026-09-01T23:48:44Z [claude-2026-09-01-a] step: added 'Tests incl. envelope + lock-free lists, plain fixture, trailer-only effective_commits'
 - 2026-09-02T00:06:25Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: sequence the PROTOCOL_TEXT edit after T-w0emnj; bump PROTOCOL_VERSION if T-2e587s has landed
+- 2026-09-02T01:54:41Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T01:56:58Z [claude-2026-09-01-b] step: checked 'task_digest() over existing structured views; brief subcommand with --last/--no-git'
+- 2026-09-02T01:56:58Z [claude-2026-09-01-b] step: checked '--brief on show and next (replaces the task_full shape; -n rows unchanged)'
+- 2026-09-02T01:56:58Z [claude-2026-09-01-b] step: checked 'Replace the PROTOCOL_TEXT step-2 clause; re-run init; README; DESIGN §5'
+- 2026-09-02T01:56:59Z [claude-2026-09-01-b] step: checked 'Tests incl. envelope + lock-free lists, plain fixture, trailer-only effective_commits'

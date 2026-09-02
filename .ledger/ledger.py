@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.1.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 6
+PROTOCOL_VERSION = 7
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -143,9 +143,10 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 
 1. Export a session id once: `LEDGER_SESSION=claude-<YYYY-MM-DD>-<letter>`.
 2. `ledger next --claim --json` — this is your task. Read its file (Spec,
-   Next Steps, Open Questions, recent Log) BEFORE writing code; that is
-   your handoff from previous sessions. If `task` is null, `why` explains
-   it — report that to the human instead of inventing work.
+   Next Steps, Open Questions; `ledger brief <id> --json` for the recent
+   Log and dead ends on long tasks) BEFORE writing code; that is your
+   handoff from previous sessions. If `task` is null, `why` explains it —
+   report that to the human instead of inventing work.
 3. `ledger questions --human --json` — surface anything listed to the
    human in your first message.
 4. Before implementing, `ledger search <symbol|component|error> --json`
@@ -1119,6 +1120,86 @@ def task_full(ctx: Ctx, task: Task, trailer_map: dict | None = None,
     }
 
 
+def task_digest(ctx: Ctx, task: Task, last: int = 10,
+                trailer_map: dict | None = None,
+                all_tasks: list | None = None) -> dict:
+    """The bounded derived view (DESIGN §5): everything an agent needs to
+    resume WITHOUT the unbounded parts. Only `recent_log` is capped; the
+    Spec body is deliberately excluded (line count only) so the one file
+    read stays the authority on what to build."""
+    steps = task.steps()
+    questions = task.questions()
+    log = sorted(task.log(), key=lambda e: e["ts"])  # stable: ties keep file order
+    answers = [e for e in log if e["verb"] == "answer"]
+    human_gated = []
+    for q in questions:
+        if not q["human"]:
+            continue
+        prefix = f"'HUMAN: {q['text']}' ->"
+        by = [e for e in answers if e["text"].startswith(prefix)]
+        human_gated.append({"n": q["n"], "text": q["text"],
+                            "answered": q["answered"], "answer": q["answer"],
+                            "answered_by": by[-1]["actor"] if by else None})
+    section_shas = [c["sha"] for c in task.commits()]
+    trailer_shas = (trailer_map or {}).get(task.id, [])
+    effective = list(dict.fromkeys(section_shas + [s[:7] for s in trailer_shas]))
+    if all_tasks is None:
+        all_tasks, _ = load_all_tasks(ctx)
+    spec = task.get_section("Spec")
+    return {
+        "header": {k: task.header.get(k) for k in HEADER_ORDER
+                   if k in task.header},
+        "path": str(task.path) if task.path else None,
+        "steps_open": [s for s in steps if not s["done"]],
+        "steps_total": len(steps),
+        "steps_done": sum(1 for s in steps if s["done"]),
+        "human_gated_questions": human_gated,
+        "open_questions": sum(1 for q in questions if not q["answered"]),
+        "recent_log": log[-last:] if last > 0 else [],
+        "log_total": len(log),
+        "dead_ends": [e for e in log if e["verb"] == "note(dead-end)"],
+        "commits": task.commits(),
+        "effective_commits": effective,
+        "closed_relation": task.closed_relation(),
+        "dependents": dependents_of(task, all_tasks),
+        "last_activity": task.last_activity(),
+        "spec_lines": len(spec.split("\n")) if spec else 0,
+    }
+
+
+def digest_human(d: dict) -> list[str]:
+    h = d["header"]
+    out = [f"{h.get('id')} [{h.get('priority')}/{h.get('size')}] "
+           f"{h.get('title')} — {h.get('status')}"
+           + (f", claimed by {h['claimed_by']}" if h.get("claimed_by") else "")
+           + (f", blocked on {h['blocked_on']}" if h.get("blocked_on") else ""),
+           f"  spec: {d['spec_lines']} line(s) in {d['path']}",
+           f"  steps: {d['steps_done']}/{d['steps_total']} done"]
+    for s in d["steps_open"]:
+        out.append(f"    [ ] {s['n']}. {s['text']}")
+    for q in d["human_gated_questions"]:
+        mark = "answered" if q["answered"] else "OPEN"
+        out.append(f"  human ({mark}): {q['text']}"
+                   + (f" -> {q['answer']}" if q["answer"] else ""))
+    for e in d["dead_ends"]:
+        out.append(f"  dead end: {e['text']}")
+    out.append(f"  recent log ({len(d['recent_log'])} of {d['log_total']}):")
+    for e in d["recent_log"]:
+        out.append(f"    {e['ts']} {e['verb']}: {e['text']}")
+    out.append(f"  commits: {', '.join(d['effective_commits']) or '(none)'}"
+               f"; dependents: {', '.join(d['dependents']) or '(none)'}"
+               f"; last activity {d['last_activity']}")
+    return out
+
+
+def _brief_args_ok(args) -> None:
+    if not getattr(args, "brief", False) and (
+            getattr(args, "last", None) is not None
+            or getattr(args, "no_git", False)):
+        raise LedgerError("usage", "--last / --no-git need --brief",
+                          exit_code=3)
+
+
 def absorbed_by(task: Task, all_tasks: list[Task]) -> list[dict]:
     """Every task whose closed relation targets this one — the reverse view,
     derived on read so the survivor's file is never written."""
@@ -1540,8 +1621,15 @@ def cmd_list(args) -> int:
 
 def cmd_show(args) -> int:
     ctx = make_ctx(args)
+    _brief_args_ok(args)
     task = load_task_or_die(ctx, args.id, for_write=False)
     all_tasks, _ = load_all_tasks(ctx)
+    if getattr(args, "brief", False):
+        trailer_map = {} if args.no_git else trailer_links(ctx)
+        data = task_digest(ctx, task, args.last or 10, trailer_map, all_tasks)
+        data["absorbed"] = absorbed_by(task, all_tasks)
+        emit(args, True, data, human=digest_human(data))
+        return 0
     data = task_full(ctx, task, trailer_links(ctx), all_tasks)
     data["absorbed"] = absorbed_by(task, all_tasks)
     human = [serialize_task(task).rstrip("\n"), "",
@@ -1555,7 +1643,19 @@ def cmd_show(args) -> int:
     return 0
 
 
+def cmd_brief(args) -> int:
+    ctx = make_ctx(args)  # read-only, lock-free
+    task = load_task_or_die(ctx, args.id, for_write=False)
+    all_tasks, _ = load_all_tasks(ctx)
+    trailer_map = {} if args.no_git else trailer_links(ctx)
+    last = 10 if args.last is None else args.last
+    data = task_digest(ctx, task, last, trailer_map, all_tasks)
+    emit(args, True, data, human=digest_human(data))
+    return 0
+
+
 def cmd_next(args) -> int:
+    _brief_args_ok(args)
     ctx = make_ctx(args, mutating=args.claim)
     tasks, problems = load_all_tasks(ctx)
     bad = structural_problem_stems(problems)
@@ -1590,7 +1690,12 @@ def cmd_next(args) -> int:
         apply_claim(top, ctx.actor, takeover)
         save_task(top)
         claimed = True
-    data = {"task": task_full(ctx, top, trailer_links(ctx), tasks),
+    if getattr(args, "brief", False):
+        trailer_map = {} if args.no_git else trailer_links(ctx)
+        payload = task_digest(ctx, top, args.last or 10, trailer_map, tasks)
+    else:
+        payload = task_full(ctx, top, trailer_links(ctx), tasks)
+    data = {"task": payload,
             "claimed": claimed,
             "stale_takeover": flag == "stale_claim",
             "why": why, "blocked_on_human": human_blocked,
@@ -3074,15 +3179,35 @@ def build_parser() -> Parser:
     p.add_argument("--unclaimed", action="store_true")
     p.set_defaults(fn=cmd_list)
 
-    p = sub.add_parser("show", parents=[common], help="show one task in full")
+    brief_opts = argparse.ArgumentParser(add_help=False)
+    brief_opts.add_argument("--last", type=int, default=None, metavar="N",
+                            help="recent Log entries to include (default 10)")
+    brief_opts.add_argument("--no-git", action="store_true",
+                            help="skip the trailer walk (effective_commits = "
+                                 "## Commits)")
+
+    p = sub.add_parser("show", parents=[common, brief_opts],
+                       help="show one task in full")
     p.add_argument("id")
+    p.add_argument("--brief", action="store_true",
+                   help="the bounded digest instead of everything")
     p.set_defaults(fn=cmd_show)
 
-    p = sub.add_parser("next", parents=[common],
+    p = sub.add_parser("brief", parents=[common, brief_opts],
+                       help="bounded derived view of one task (open steps, "
+                            "human questions, dead ends, recent Log)")
+    p.add_argument("id")
+    # NOT set_defaults(last=10): parent-parser actions are shared objects,
+    # so that would change --last's default for show/next as well
+    p.set_defaults(fn=cmd_brief)
+
+    p = sub.add_parser("next", parents=[common, brief_opts],
                        help="the highest-priority eligible task")
     p.add_argument("--claim", action="store_true",
                    help="claim the top pick atomically")
     p.add_argument("-n", type=int, default=1, help="also list top N")
+    p.add_argument("--brief", action="store_true",
+                   help="return data.task as the bounded digest")
     p.set_defaults(fn=cmd_next)
 
     p = sub.add_parser("claim", parents=[common], help="claim a task")

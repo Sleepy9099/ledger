@@ -22,6 +22,9 @@ def test_random_cli_sequences_never_corrupt(plain):
             "-s", rng.choice(["xs", "s", "m", "l", "xl"]), *extra)
         ids.append(tid)
 
+    def op_brief():
+        assert plain.run("brief", any_id()).returncode == 0
+
     def op_note():
         extra = ["--dead-end"] if rng.random() < 0.3 else []
         plain.run("note", any_id(), f"breadcrumb {rng.randrange(999)}",
@@ -67,7 +70,7 @@ def test_random_cli_sequences_never_corrupt(plain):
             plain.run("drop", any_id(), "--why", "synthetic drop")
 
     ops = [op_add, op_note, op_step, op_question, op_claim_release,
-           op_block_unblock, op_set, op_depends, op_done, op_drop]
+           op_block_unblock, op_set, op_depends, op_done, op_drop, op_brief]
     op_add()
     for i in range(70):
         rng.choice(ops)()
