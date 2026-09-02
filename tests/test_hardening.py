@@ -491,3 +491,39 @@ def test_drop_relation_repoints_dependents_and_next_why(repo):
     warn = [e for e in d["errors"] if e.get("task") == sl]
     assert warn and warn[0]["fix_hint"] == (
         f"ledger set {sl} --remove-depends {other}")
+
+
+
+# --- control bytes never blind log-tamper (sweep 2026-09-02, task B) --------
+
+def test_control_bytes_are_stripped_flagged_and_never_hide_tampering(
+        repo, ledger_mod):
+    import subprocess as _sp
+    import sys as _sys
+    r = _sp.run([_sys.executable, str(repo.script), "add", "NUL spec",
+                 "--spec", "-", "--json"], cwd=str(repo.root), env=repo.env,
+                capture_output=True, input=b"spec\x00 with NUL and \x1b[31mcolour\n")
+    tid = json.loads(r.stdout.decode("utf-8"))["data"]["id"]
+    raw = repo.task_file(tid).read_bytes()
+    assert b"\x00" not in raw and b"\x1b" not in raw  # stripped on input
+    assert "spec with NUL and [31mcolour" in repo.j("show", tid)["data"]["spec"]
+    # a NUL cannot even be passed as a process argument: unit-check the
+    # inline sanitizer that every Log line goes through
+    assert ledger_mod.sanitize_inline("line\x00with\x1bnul\tok") == "linewithnul\tok"
+    # a hand-written control byte is an encoding error...
+    repo.task_file(tid).write_bytes(raw.replace(b"## Spec\n", b"## Spec\n\x00\n"))
+    rc, payload = validate(repo, "--no-git")
+    enc = [e for e in payload["errors"] if e["code"] == "encoding"]
+    assert enc and "binary" in enc[0]["message"]
+    # ...and once committed, deleting a Log line is still detected
+    repo.j("note", tid, "load-bearing line")  # CLI write repairs? no: only new text
+    repo.task_file(tid).write_bytes(
+        repo.task_file(tid).read_bytes().replace(b"## Spec\n", b"## Spec\n\x00\n"))
+    repo.commit_all("Track binary task")
+    text = repo.task_file(tid).read_bytes()
+    lines = [l for l in text.split(b"\n") if b"load-bearing" not in l]
+    repo.task_file(tid).write_bytes(b"\n".join(lines))
+    rc, payload = validate(repo, "--coverage")
+    tamper = [e for e in payload["errors"] if e["code"] == "log-tamper"
+              and e["task"] == tid]
+    assert tamper and "binary" in tamper[0]["message"]

@@ -282,9 +282,16 @@ def parse_ts(ts: str) -> datetime | None:
     return datetime.strptime(ts, TS_FMT).replace(tzinfo=timezone.utc)
 
 
+# C0 control characters other than tab/newline/CR: a single one makes git
+# treat the task file as binary, and a binary file's Log cannot be verified
+CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+CONTROL_BYTES_RE = re.compile(rb"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
 def sanitize_inline(text: str) -> str:
-    """One logical line: no newlines, no CRs."""
-    return re.sub(r"[\r\n]+", "; ", str(text)).strip()
+    """One logical line: no newlines, no CRs, no control characters."""
+    text = re.sub(r"[\r\n]+", "; ", str(text))
+    return CONTROL_CHARS_RE.sub("", text).strip()
 
 
 def sanitize_actor(actor: str) -> str:
@@ -1894,6 +1901,7 @@ def _check_section_body(text: str, what: str) -> str:
     """Multiline section input must not smuggle in '## ' headings — outside
     code fences they would split the task file into new sections."""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = CONTROL_CHARS_RE.sub("", text)  # pasted terminal output, NULs
     in_fence = False
     for line in text.split("\n"):
         stripped = line.lstrip()
@@ -3264,6 +3272,16 @@ def validate_offline(ctx: Ctx) -> list[dict]:
                                   f"{path.name} contains CR bytes (must be LF-only)",
                                   task=stem,
                                   fix_hint="any ledger CLI write repairs this"))
+        if CONTROL_BYTES_RE.search(raw):
+            violations.append(err(
+                "encoding",
+                f"{path.name} contains control bytes: git treats the file as "
+                "binary and the append-only Log cannot be verified",
+                task=stem,
+                fix_hint="remove them from the section prose (CLI writes "
+                         "strip control characters from new text; the Log "
+                         "line itself is append-only — re-add its text with "
+                         "ledger note if it was corrupted)"))
         try:
             text = raw.decode("utf-8-sig")
         except UnicodeDecodeError as e:
@@ -3542,9 +3560,21 @@ def _tamper_violations(patch: str, where: str, violations: list[dict]) -> None:
     deleted_files: list[str] = []
     current_new: str | None = None
     current_old: str | None = None
+    diff_file = ""
     for line in patch.split("\n"):
         if line.startswith("diff --git"):
             current_new = current_old = None
+            diff_file = line[len("diff --git a/"):].split(" b/", 1)[0]
+        elif line.startswith("Binary files"):
+            # a binary task file hides its patch: nothing can be verified,
+            # which is a violation, not "no changes"
+            violations.append(err(
+                "log-tamper",
+                f"{Path(diff_file).name}: file is binary (control bytes) "
+                f"{where} — Log lines cannot be verified",
+                task=Path(diff_file).stem, severity="warning",
+                fix_hint="remove control bytes from the file; ledger "
+                         "validate names them (encoding)"))
         elif line.startswith("--- a/"):
             current_old = line[6:]
         elif line.startswith("--- "):
