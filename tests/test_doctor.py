@@ -158,3 +158,27 @@ def test_protocol_adapters_are_maintained_and_verified(repo):
     # the protocol no longer assumes one vendor for the session id
     assert "<agent>-<YYYY-MM-DD>" in (repo.root / ".ledger" / "PROTOCOL.md"
                                       ).read_text(encoding="utf-8")
+
+
+
+def test_malformed_config_types_are_config_errors_not_tracebacks(plain):
+    cfg_path = plain.root / ".ledger" / "config.json"
+    good = json.loads(cfg_path.read_text(encoding="utf-8"))
+    bad_values = {
+        "stale_claim_days": "x", "exempt_patterns": "^Merge ", "prefix": 5,
+        "baseline": 3, "exempt_allowed_paths": "docs/**",
+        "exempt_policy_since": 12, "protocol_adapters": "CLAUDE.md",
+        "version": "1",
+    }
+    for key, value in bad_values.items():
+        cfg = dict(good)
+        cfg[key] = value
+        cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        r = plain.run("list", "--json")
+        assert r.returncode == 2, (key, r.stdout, r.stderr)
+        payload = json.loads(r.stdout)  # an envelope, never a traceback
+        assert payload["errors"][0]["code"] == "config", key
+        assert key in payload["errors"][0]["message"], key
+        assert payload["errors"][0]["fix_hint"], key
+    cfg_path.write_text(json.dumps(good, indent=2), encoding="utf-8")
+    assert plain.j("list")["ok"]

@@ -1,10 +1,12 @@
 ---
 id: T-piaumc
 title: Small fixes from the 2026-09-02 review: post-claim resources_held, stale_takeover on self-refresh, config type validation, answers-apply wording
-status: todo
+status: in_progress
 priority: p2
 size: xs
 created: 2026-09-02T04:51:27Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T05:11:34Z
 tags: hygiene
 ---
 
@@ -27,3 +29,4 @@ Tests for 1–3.
 ## Log
 
 - 2026-09-02T04:51:27Z [claude-2026-09-01-b] add: created: Small fixes from the 2026-09-02 review: post-claim resources_held, stale_takeover on self-refresh, config type validation, answers-apply wording [p2/xs] (tags: hygiene)
+- 2026-09-02T05:11:34Z [claude-2026-09-01-b] claim: claimed

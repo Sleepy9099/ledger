@@ -124,8 +124,10 @@ questions [--human] [--task <id>]    the operator decision view: open
                                      on human with its recorded reason
 answers apply <file|->               record answers in batch: feed back the
                                      `questions --json` envelope with an
-                                     `answer` on each row (all-or-nothing,
-                                     re-runnable; rows without answers skip)
+                                     `answer` on each row (every row is
+                                     validated before any write, then files
+                                     are written one at a time — re-run after
+                                     a crash: answered rows skip)
 claim / release --note "handoff"     session start / session end
 list --resource <slug>               tasks declaring a resource lease
 list --mine                          everything this session holds (the

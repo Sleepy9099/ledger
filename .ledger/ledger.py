@@ -1080,12 +1080,51 @@ def make_ctx(args, mutating: bool = False) -> Ctx:
     cfg_path = ledger_dir / "config.json"
     if cfg_path.exists():
         try:
-            config.update(json.loads(cfg_path.read_text(encoding="utf-8")))
+            loaded = json.loads(cfg_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as e:
             raise LedgerError("config", f"cannot read {cfg_path}: {e}",
                               fix_hint="fix or delete .ledger/config.json")
+        if not isinstance(loaded, dict):
+            raise LedgerError("config", f"{cfg_path} must hold a JSON object",
+                              fix_hint="fix or delete .ledger/config.json")
+        config.update(loaded)
+    validate_config(config)
     return Ctx(ledger_dir=ledger_dir, config=config,
                actor=resolve_actor(args), json_mode=getattr(args, "json", False))
+
+
+def validate_config(config: dict) -> None:
+    """Type-check config.json once, so a typo is a `config` envelope with a
+    fix_hint instead of a traceback deep inside some command."""
+    def fail(key: str, expected: str) -> None:
+        got = type(config.get(key)).__name__
+        raise LedgerError(
+            "config", f"config.json key '{key}' must be {expected} (got {got})",
+            fix_hint=f"fix '{key}' in .ledger/config.json, or delete the key "
+                     "to get the default")
+
+    def is_int(v) -> bool:
+        return isinstance(v, int) and not isinstance(v, bool)
+
+    if not is_int(config.get("version")):
+        fail("version", "an integer schema version")
+    prefix = config.get("prefix")
+    if not isinstance(prefix, str) or not prefix.strip():
+        fail("prefix", "a non-empty string")
+    for key in ("baseline", "exempt_policy_since"):
+        if config.get(key) is not None and not isinstance(config.get(key), str):
+            fail(key, "null or a commit sha string")
+    if not is_int(config.get("stale_claim_days")):
+        fail("stale_claim_days", "an integer number of days")
+    for key in ("exempt_patterns", "protocol_adapters"):
+        val = config.get(key)
+        if not isinstance(val, list) or any(not isinstance(x, str) for x in val):
+            fail(key, "a list of strings")
+    allowed = config.get("exempt_allowed_paths")
+    if allowed is not None and (
+            not isinstance(allowed, list)
+            or any(not isinstance(x, str) or not x.strip() for x in allowed)):
+        fail("exempt_allowed_paths", "null or a list of non-empty glob strings")
 
 
 def task_path(ctx: Ctx, tid: str) -> Path:
@@ -2043,14 +2082,17 @@ def cmd_next(args) -> int:
         return 0
     top, flag = eligible[0]
     claimed = False
+    # a takeover is a stale claim held by SOMEONE ELSE; refreshing one's own
+    # stale claim is neither logged nor reported as one
+    stale_holder = top.header.get("claimed_by") if flag == "stale_claim" else None
+    would_take_over = bool(stale_holder) and stale_holder != ctx.actor
     if args.claim:
-        holder = top.header.get("claimed_by")
-        # refreshing one's own stale claim is not a takeover
-        takeover = (holder if flag == "stale_claim" and holder != ctx.actor
-                    else None)
-        apply_claim(top, ctx.actor, takeover)
+        apply_claim(top, ctx.actor, stale_holder if would_take_over else None)
         save_task(top)
         claimed = True
+        # report the leases AFTER the claim, including the ones just taken
+        resources_held = {r: t.id for r, t in
+                          held_resources(pool, stale_days).items()}
     held = cap("held", held_by_me(top.id), "ledger list --mine --json")
     # the digest is the DEFAULT here: this is the one command every session
     # runs, and the protocol already requires reading the task file, so the
@@ -2064,7 +2106,7 @@ def cmd_next(args) -> int:
         payload = task_digest(ctx, top, last, trailer_map, tasks)
     data = {"task": payload,
             "claimed": claimed,
-            "stale_takeover": flag == "stale_claim",
+            "stale_takeover": would_take_over,
             "why": why, "blocked_on_human": human_blocked,
             "stale_blocks": stale_blocks, "held": held,
             "resources_held": resources_held}

@@ -1119,3 +1119,25 @@ def test_report_final_commit_only_when_unique(repo):
     merge_sha = repo.git("rev-parse", "HEAD").stdout.strip()[:7]
     assert d["final_commit"] == merge_sha
     assert d["final_commit_candidates"] == [merge_sha]
+
+
+
+# --- small fixes from the 2026-09-02 review (T-piaumc) ----------------------
+
+def test_next_claim_reports_post_claim_resources_and_true_takeovers(repo):
+    from test_hardening import set_stale_days
+    tid = repo.add_task("Needs gpu3", "--tag", "resource:gpu3")
+    d = repo.j("next", "--claim", "--session", "a")["data"]
+    assert d["claimed"] and d["resources_held"] == {"gpu3": tid}
+    assert d["stale_takeover"] is False
+    set_stale_days(repo, -1)
+    # refreshing one's OWN stale claim is not a takeover
+    d = repo.j("next", "--claim", "--session", "a")["data"]
+    assert d["task"]["header"]["id"] == tid and d["stale_takeover"] is False
+    assert d["task"]["header"]["claimed_by"] == "a"
+    # a different session taking a stale claim is
+    d = repo.j("next", "--session", "b")["data"]
+    assert d["stale_takeover"] is True and d["claimed"] is False
+    d = repo.j("next", "--claim", "--session", "b")["data"]
+    assert d["stale_takeover"] is True
+    assert d["task"]["header"]["claimed_by"] == "b"
