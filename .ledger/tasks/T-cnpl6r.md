@@ -1,10 +1,11 @@
 ---
 id: T-cnpl6r
 title: Prune safety: reachability from every ref, shallow refusal, last-evidence guard, replacement candidates
-status: todo
+status: done
 priority: p1
 size: s
 created: 2026-09-02T11:44:57Z
+closed: 2026-09-02T11:49:18Z
 tags: integrity
 ---
 
@@ -28,6 +29,10 @@ tags: integrity
 
 ## Commits
 
+- 869c012 2026-09-02 Prune safety: reachability from every ref, shallow refusal, last-evidence guard
+
 ## Log
 
 - 2026-09-02T11:44:57Z [claude-2026-09-01-b] add: created: Prune safety: reachability from every ref, shallow refusal, last-evidence guard, replacement candidates [p1/s] (tags: integrity)
+- 2026-09-02T11:49:18Z [claude-2026-09-01-b] link: 869c012 Prune safety: reachability from every ref, shallow refusal, last-evidence guard
+- 2026-09-02T11:49:18Z [claude-2026-09-01-b] done: evidence: 869c012
