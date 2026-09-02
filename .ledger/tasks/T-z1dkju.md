@@ -1,12 +1,11 @@
 ---
 id: T-z1dkju
 title: Operator decision loop: questions with context, blocked-on-human rows, answers apply
-status: in_progress
+status: done
 priority: p3
 size: m
 created: 2026-09-01T23:48:40Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T02:19:46Z
+closed: 2026-09-02T02:35:27Z
 depends_on: T-w0emnj
 tags: human-decisions, ergonomics
 ---
@@ -53,6 +52,8 @@ B: a 2-row file across two tasks → both answered, one `answer` Log line each, 
 
 ## Commits
 
+- acb0117 2026-09-01 Operator decision loop: questions with context, blocked-on-human rows, answers apply
+
 ## Log
 
 - 2026-09-01T23:48:40Z [claude-2026-09-01-a] add: created: Operator decision loop: questions with context, blocked-on-human rows, answers apply
@@ -67,3 +68,5 @@ B: a 2-row file across two tasks → both answered, one `answer` Log line each, 
 - 2026-09-02T02:28:44Z [claude-2026-09-01-b] step: checked 'answers apply: parse before lock, load once, selector rule, all-rows-resolve-before-write, cmd_done-style multi-error refusal, _answer_question extraction'
 - 2026-09-02T02:28:44Z [claude-2026-09-01-b] step: checked 'README (questions fields; answers apply); DESIGN §5 command list; optional PROTOCOL_TEXT sentence on writing options under a question'
 - 2026-09-02T02:28:44Z [claude-2026-09-01-b] step: checked 'Tests for both parts incl. lock-timeout and envelope entries'
+- 2026-09-02T02:35:27Z [claude-2026-09-01-b] link: acb0117 Operator decision loop: questions with context, blocked-on-human rows, answers apply
+- 2026-09-02T02:35:27Z [claude-2026-09-01-b] done: evidence: acb0117
