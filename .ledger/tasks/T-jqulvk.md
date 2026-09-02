@@ -23,3 +23,4 @@ validate spawns one 'git rev-parse' per cached ## Commits line (sha-unreachable)
 
 - 2026-08-28T03:02:19Z [claude-2026-08-27-a] add: created: Batch git subprocess calls in validate
 - 2026-09-02T00:55:00Z [claude-2026-09-01-b] block: on external: validate --coverage measurably slow on a real history — observe-first; measured 2026-09-01: validate --coverage --strict 0.8s over this repo's full history
+- 2026-09-02T02:51:59Z [claude-2026-09-01-b] note: T-zl7jh5 landed 2026-09-01: with exempt_allowed_paths set, every explicit-exempt commit and every pattern-exempt true merge costs one git diff-tree in validate --coverage and scan; include exempt commits in the batching scope when this task is triggered
