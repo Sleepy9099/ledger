@@ -1,12 +1,11 @@
 ---
 id: T-y7j9tx
 title: Decide: enforce 'committed while claimed' (linked-outside-claim)
-status: in_progress
+status: done
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T03:29:15Z
+closed: 2026-09-02T03:29:37Z
 tags: ownership, decision
 ---
 
@@ -35,6 +34,8 @@ T-fkywmw (write-path claim nonce — different mechanism, same defer-until-obser
 
 ## Commits
 
+- 5eacf66 2026-09-01 Record the decision not to enforce "committed while claimed"
+
 ## Log
 
 - 2026-09-01T23:48:40Z [claude-2026-09-01-a] add: created: Decide: enforce 'committed while claimed' (linked-outside-claim)
@@ -47,3 +48,5 @@ T-fkywmw (write-path claim nonce — different mechanism, same defer-until-obser
 - 2026-09-02T03:29:15Z [claude-2026-09-01-b] claim: claimed
 - 2026-09-02T03:29:36Z [claude-2026-09-01-b] step: checked 'Human picks A/B/C; if C, drop this task with the answer as --why'
 - 2026-09-02T03:29:36Z [claude-2026-09-01-b] step: checked 'If A: implement at info tier with the interval rules below; if B: extend TRAILER_RE/_parse_trailers and the claim-actor match'
+- 2026-09-02T03:29:36Z [claude-2026-09-01-b] link: 5eacf66 Record the decision not to enforce "committed while claimed"
+- 2026-09-02T03:29:37Z [claude-2026-09-01-b] done: evidence: 5eacf66
