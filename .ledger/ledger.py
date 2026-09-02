@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.1.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 4
+PROTOCOL_VERSION = 5
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -152,7 +152,8 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 ## While working
 
 - One intent, one verb — prose in a note controls nothing:
-  fact / dead end    -> `ledger note <id> "..."`
+  fact / dead end    -> `ledger note <id> "..."` (`--dead-end` for what
+                        did NOT work — it is the most valuable breadcrumb)
   new obligation     -> `ledger add "title" -p p2 -s s --spec -` (spec via
                         stdin; never a note saying "someone should")
   X must land first  -> `ledger add --after X` / `set <id> --add-depends X`
@@ -1646,9 +1647,14 @@ def cmd_set(args) -> int:
 def cmd_note(args) -> int:
     ctx = make_ctx(args, mutating=True)
     task = load_task_or_die(ctx, args.id, for_write=True)
-    task.append_log(ctx.actor, "note", args.text)
+    # note(dead-end) mirrors done(no-code): a flag-generated verb sub-type so
+    # views can select negative knowledge; carries no validation semantics
+    verb = "note(dead-end)" if getattr(args, "dead_end", False) else "note"
+    task.append_log(ctx.actor, verb, args.text)
     save_task(task)
-    emit(args, True, {"id": task.id}, human=[f"noted on {task.id}"])
+    emit(args, True, {"id": task.id, "verb": verb},
+         human=[f"noted on {task.id}" + (" (dead end)" if verb != "note"
+                                          else "")])
     return 0
 
 
@@ -2812,6 +2818,9 @@ def build_parser() -> Parser:
                        help="append a Log breadcrumb")
     p.add_argument("id")
     p.add_argument("text")
+    p.add_argument("--dead-end", action="store_true",
+                   help="mark as negative knowledge (verb note(dead-end)) so "
+                        "brief/next can surface it")
     p.set_defaults(fn=cmd_note)
 
     p = sub.add_parser("step", parents=[common], help="manage Next Steps")

@@ -189,3 +189,13 @@ def test_validation_code_table_is_stable(ledger_mod):
         "exempt-ratio",
     }
     assert ledger_mod.VALIDATION_CODES["exempt-ratio"] == "info"
+
+
+
+def test_dead_end_notes_never_affect_closing(repo):
+    tid = repo.add_task("Closed with lessons")
+    repo.j("note", tid, "approach A failed", "--dead-end")
+    repo.j("done", tid, "--no-code", "documented the dead end instead")
+    repo.j("note", tid, "approach B also failed", "--dead-end")
+    rc, payload = validate(repo, "--no-git", "--strict", expect=0)
+    assert payload["ok"]

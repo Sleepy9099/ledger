@@ -104,7 +104,10 @@ There is **no `updated` field** — it would conflict on every concurrent edit.
   `- <sha7> <YYYY-MM-DD> <subject>`. Git trailers are the truth (§4).
 - `## Log` — **last section, append-only**. One line per event:
   `- <UTC-ISO> [<actor>] <verb>: <text>`. Verbs: add claim release note step
-  question answer link block unblock set done done(no-code) drop. Lines are
+  question answer link block unblock set done done(no-code) note(dead-end)
+  drop (`note(dead-end)` is written only by `note --dead-end`: a selection
+  key for views, with no validation semantics — an unmarked dead end is a
+  valid plain note). Lines are
   self-contained, timestamped, actor-tagged, and order-insensitive — any
   merge interleaving is semantically correct. One CLI-authored sub-grammar
   lives inside a `drop:` line's text: `duplicate-of T-x — why` /

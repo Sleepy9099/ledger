@@ -18,7 +18,9 @@ def test_random_cli_sequences_never_corrupt(plain):
         ids.append(tid)
 
     def op_note():
-        plain.run("note", any_id(), f"breadcrumb {rng.randrange(999)}")
+        extra = ["--dead-end"] if rng.random() < 0.3 else []
+        plain.run("note", any_id(), f"breadcrumb {rng.randrange(999)}",
+                  *extra)
 
     def op_step():
         tid = any_id()

@@ -339,3 +339,17 @@ def test_trailer_with_extra_text_and_exempt_line_still_dangles(repo):
     unknown = [e for e in payload["errors"] if e["code"] == "trailer-dangling"
                and "T-gh0st9" in e["message"]]
     assert unknown and "restore it from git history" in unknown[0]["fix_hint"]
+
+
+
+def test_deleting_a_dead_end_note_is_tampering(repo):
+    tid = repo.add_task("Lessons")
+    repo.j("note", tid, "the cache route deadlocks", "--dead-end")
+    repo.commit_all("Track lessons")
+    text = "\n".join(line for line in repo.read(tid).split("\n")
+                     if "deadlocks" not in line)
+    repo.write(tid, text)
+    repo.commit_all("Forget the lesson", ("Ledger-Exempt: cover-up",))
+    rc, payload = validate(repo, "--coverage")
+    assert any(e["code"] == "log-tamper" and e["task"] == tid
+               for e in payload["errors"]), payload["errors"]

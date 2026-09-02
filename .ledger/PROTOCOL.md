@@ -20,7 +20,8 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 ## While working
 
 - One intent, one verb — prose in a note controls nothing:
-  fact / dead end    -> `ledger note <id> "..."`
+  fact / dead end    -> `ledger note <id> "..."` (`--dead-end` for what
+                        did NOT work — it is the most valuable breadcrumb)
   new obligation     -> `ledger add "title" -p p2 -s s --spec -` (spec via
                         stdin; never a note saying "someone should")
   X must land first  -> `ledger add --after X` / `set <id> --add-depends X`

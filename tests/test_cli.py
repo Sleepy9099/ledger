@@ -422,3 +422,19 @@ def test_integration_handoff_sequence(repo):
     d = repo.j("done", tid, "--commit", "HEAD", "--session", "integrator")
     assert d["ok"]
     assert repo.j("validate", "--strict", "--no-git")["ok"]
+
+
+
+# --- note --dead-end (T-yfvuya) ----------------------------------------------
+
+def test_note_dead_end_writes_selectable_verb(repo):
+    tid = repo.add_task("Explorer")
+    d = repo.j("note", tid, "tried the regex route; catastrophic backtracking",
+               "--dead-end")
+    assert d["data"]["verb"] == "note(dead-end)"
+    d = repo.j("note", tid, "plain fact")
+    assert d["data"]["verb"] == "note"
+    log = repo.j("show", tid)["data"]["log"]
+    assert [e["verb"] for e in log[-2:]] == ["note(dead-end)", "note"]
+    assert "- 2" in repo.read(tid) and "] note(dead-end): tried" in repo.read(tid)
+    assert repo.j("validate", "--no-git", "--strict")["ok"]

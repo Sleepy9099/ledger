@@ -81,7 +81,8 @@ add "title" -p p1 -s m --spec -      create a task (spec via stdin);
 show <id> | list [--status ...]      read state (any unique id fragment works)
 set <id> --priority|--size|--title   edit header fields; --add-depends /
     |--add-depends|--remove-depends  --remove-depends keep the DAG honest
-note <id> "text"                     append a Log breadcrumb
+note <id> "text" [--dead-end]        append a Log breadcrumb (--dead-end
+                                     marks what did NOT work: selectable)
 step <id> add|check|uncheck <n|text> manage Next Steps checkboxes
 question <id> add "..." [--human]    open a question (--human gates done)
 question <id> resolve <n> --answer   answer one

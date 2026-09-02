@@ -161,3 +161,20 @@ def test_closed_relation_grammar_roundtrip_and_prose_is_not_a_relation(ledger_mo
         "- 2026-08-28T10:00:00Z [other] drop: superseded-by T-000000\n")
     task, _ = ledger_mod.parse_task(torn)
     assert task.closed_relation() is None
+
+
+
+def test_dead_end_note_roundtrips_and_is_selectable(ledger_mod):
+    text = CANONICAL.replace(
+        "- 2026-08-26T19:55:31Z [claude-2026-08-26-b] link: 4f2c9ab seam "
+        "extracted, tests green\n",
+        "- 2026-08-26T19:55:31Z [claude-2026-08-26-b] link: 4f2c9ab seam "
+        "extracted, tests green\n"
+        "- 2026-08-26T19:56:00Z [claude-2026-08-26-b] note(dead-end): "
+        "asyncio.timeout does not cover the DNS phase\n")
+    task, problems = ledger_mod.parse_task(text)
+    assert problems == []
+    assert ledger_mod.serialize_task(task) == text
+    dead = [e for e in task.log() if e["verb"] == "note(dead-end)"]
+    assert len(dead) == 1 and "DNS phase" in dead[0]["text"]
+    assert task.last_activity() == "2026-08-27T14:03:22Z"

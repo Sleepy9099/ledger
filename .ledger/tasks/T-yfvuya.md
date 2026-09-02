@@ -1,10 +1,12 @@
 ---
 id: T-yfvuya
 title: note --dead-end: machine-selectable negative-knowledge marker
-status: todo
+status: in_progress
 priority: p2
 size: xs
 created: 2026-09-01T23:48:39Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T01:15:18Z
 tags: memory
 ---
 
@@ -38,10 +40,10 @@ Older copies parse, round-trip and tamper-protect the line; they reject only the
 
 ## Next Steps
 
-- [ ] Human picks A/B/C; unblock
-- [ ] note subparser --dead-end; cmd_note passes note(dead-end); data.verb
-- [ ] DESIGN §2 verb list, PROTOCOL_TEXT 'dead ends especially' line (re-run init), README note line
-- [ ] Tests: cli (new fixture), format round-trip, log-tamper, property, validate strict
+- [x] Human picks A/B/C; unblock
+- [x] note subparser --dead-end; cmd_note passes note(dead-end); data.verb
+- [x] DESIGN §2 verb list, PROTOCOL_TEXT 'dead ends especially' line (re-run init), README note line
+- [x] Tests: cli (new fixture), format round-trip, log-tamper, property, validate strict
 
 ## Open Questions
 
@@ -61,3 +63,8 @@ Older copies parse, round-trip and tamper-protect the line; they reject only the
 - 2026-09-02T00:06:24Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: the 'dead ends especially' sentence lives in a bullet T-w0emnj replaces; doc step now targets the ontology block when T-w0emnj has landed
 - 2026-09-02T00:54:56Z [claude-2026-09-01-b] answer: 'HUMAN: Negative-knowledge marker form: (A) `ledger note <id> "..." --dead-end` writes verb `note(dead-end)` mirroring `done(no-code)` — recommended: LOG_LINE_RE already admits it, no validator has a verb whitelist, log-tamper covers it, and the flag guarantees canonical spelling; it extends the DESIGN §2 verb list, which is why this is asked. (B) keep verb `note` and a `DEAD-END:` text prefix mirroring the `HUMAN:` marker — zero vocabulary change but a convention agents can misspell. (C) no marker — the brief view shows recent notes only.' -> (A) note --dead-end writes verb note(dead-end). Operator criteria: machine-selectable so brief/next can surface negative knowledge without agents re-reading history; the flag guarantees canonical spelling for multiple agents; zero validate impact.
 - 2026-09-02T00:54:56Z [claude-2026-09-01-b] unblock: -> todo
+- 2026-09-02T01:15:18Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T01:16:01Z [claude-2026-09-01-b] step: checked 'Human picks A/B/C; unblock'
+- 2026-09-02T01:20:31Z [claude-2026-09-01-b] step: checked 'note subparser --dead-end; cmd_note passes note(dead-end); data.verb'
+- 2026-09-02T01:20:31Z [claude-2026-09-01-b] step: checked 'DESIGN §2 verb list, PROTOCOL_TEXT 'dead ends especially' line (re-run init), README note line'
+- 2026-09-02T01:20:31Z [claude-2026-09-01-b] step: checked 'Tests: cli (new fixture), format round-trip, log-tamper, property, validate strict'
