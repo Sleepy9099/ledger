@@ -1080,7 +1080,10 @@ class Ctx:
 # ---------------------------------------------------------------------------
 
 LOCK_FILENAME = ".lock"
-_LOCK_HANDLE: int | None = None  # keeps the locked fd alive for process life
+# locked fds, keyed by resolved ledger dir, kept alive for process life: an
+# embedding host that drives several ledgers from one process must lock
+# each one, not skip every lock after the first
+_LOCK_HANDLES: dict[str, int] = {}
 
 
 def _remove_quietly(path: str) -> None:
@@ -1091,8 +1094,8 @@ def _remove_quietly(path: str) -> None:
 
 
 def _acquire_mutation_lock(ledger_dir: Path) -> None:
-    global _LOCK_HANDLE
-    if _LOCK_HANDLE is not None:
+    key = str(ledger_dir.resolve())
+    if key in _LOCK_HANDLES:
         return
     try:
         timeout = float(os.environ.get("LEDGER_LOCK_TIMEOUT", "") or 10.0)
@@ -1116,7 +1119,7 @@ def _acquire_mutation_lock(ledger_dir: Path) -> None:
                 os.write(side_fd, str(os.getpid()).encode("ascii"))
                 os.close(side_fd)
                 atexit.register(_remove_quietly, sidecar)
-            _LOCK_HANDLE = fd  # held until process exit; OS releases it
+            _LOCK_HANDLES[key] = fd  # held until process exit; OS releases it
             return
         except OSError:
             if time.monotonic() >= deadline:
@@ -4323,6 +4326,40 @@ def _priority_at_creation(task: Task) -> str:
     return task.priority
 
 
+def _tips_among(cands: list[str], commits: list, repo: Path) -> list[str]:
+    """Candidates that are not ancestors of another candidate, computed
+    from the walk's parent map already in memory (no git per pair); a
+    candidate outside the walk falls back to one merge-base query."""
+    parents = {c.sha: c.parents for c in commits}
+    full = {}
+    for s in cands:
+        matches = [sha for sha in parents if sha.startswith(s)]
+        full[s] = matches[0] if len(matches) == 1 else None
+
+    def ancestors(sha: str) -> set[str]:
+        seen, stack = set(), list(parents.get(sha, []))
+        while stack:
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.add(cur)
+            stack.extend(parents.get(cur, []))
+        return seen
+
+    anc = {s: ancestors(full[s]) for s in cands if full[s]}
+    tips = []
+    for s in cands:
+        if full[s] is not None:
+            covered = any(full[s] in anc[o] for o in cands if o != s and full.get(o))
+        else:  # not in the walk (pre-baseline): ask git, once per candidate
+            covered = any(
+                o != s and run_git(["merge-base", "--is-ancestor", s, o],
+                                   repo)[0] == 0 for o in cands)
+        if not covered:
+            tips.append(s)
+    return tips
+
+
 def _replay_state(task: Task, until: str | None) -> dict:
     """Holder, closure, last activity and open HUMAN-question count AS OF
     `until` (a UTC Z stamp), rebuilt from the Log alone: claim sets the
@@ -4367,7 +4404,8 @@ def _replay_state(task: Task, until: str | None) -> dict:
 
 def cmd_report(args) -> int:
     ctx = make_ctx(args)  # read-only, lock-free
-    use_git = not args.no_git and ctx.repo is not None
+    repo = ctx.repo  # bound ONCE: the property shells out on every access
+    use_git = not args.no_git and repo is not None
     since = _window_bound(ctx, args.since, use_git)
     until = _window_bound(ctx, args.until, use_git)
     tasks, problems = load_all_tasks(ctx)
@@ -4531,7 +4569,7 @@ def cmd_report(args) -> int:
     # ---- commits (git history only; null when it cannot be computed) -----
     commits_block = None
     if use_git:
-        commits, walk_error = walk_commits(ctx.repo, ctx.config.get("baseline"))
+        commits, walk_error = walk_commits(repo, ctx.config.get("baseline"))
         if commits is not None and not walk_error:
             known = {t.id for t in tasks}
             pop_ids = {t.id for t in population}
@@ -4542,7 +4580,7 @@ def cmd_report(args) -> int:
             linked_tasks_total, linked_n = 0, 0
             per_task: dict[str, int] = {}
             for c in in_scope:
-                bucket, dangling = classify_commit(c, ctx.repo, known,
+                bucket, dangling = classify_commit(c, repo, known,
                                                    exempt_res, explicit)
                 counts[bucket] += 1
                 counts["dangling"] += len(dangling)
@@ -4561,15 +4599,9 @@ def cmd_report(args) -> int:
                     [c["sha"] for c in parent.commits()]
                     + [c.sha7 for c in commits if parent.id in c.task_ids
                        or parent.id in explicit_link_tasks(c, explicit)]))
-                index = reachable_index(ctx.repo) or {}
+                index = reachable_index(repo) or {}
                 cands = [s for s in cands if is_reachable(index, s)]
-                for s in cands:
-                    ancestor_of_other = any(
-                        o != s and run_git(["merge-base", "--is-ancestor",
-                                            s, o], ctx.repo)[0] == 0
-                        for o in cands)
-                    if not ancestor_of_other:
-                        tips.append(s)
+                tips = _tips_among(cands, commits, repo)
             # a final commit is only claimed when exactly one tip survives;
             # incomparable tips are listed, never silently picked from
             final_commit = tips[0] if len(tips) == 1 else None

@@ -1196,3 +1196,28 @@ def test_git_name_fallback_warns_and_unknown_identity_is_refused(repo):
                  "--json"], cwd=str(repo.root), env=env, capture_output=True,
                 text=True)
     assert r.returncode == 3
+
+
+
+def test_report_final_commit_needs_no_git_per_pair(ledger_mod, repo,
+                                                   monkeypatch, capsys):
+    w = repo.add_task("Wave of many commits", "-p", "p1")
+    repo.j("claim", w, "--session", "orch")
+    for i in range(8):
+        (repo.root / f"f{i}.py").write_text(str(i), encoding="utf-8")
+        repo.commit_all(f"Member commit {i}", (f"Ledger-Task: {w}",))
+    head = repo.git("rev-parse", "HEAD").stdout.strip()[:7]
+    monkeypatch.chdir(repo.root)
+    real = ledger_mod.run_git
+    calls = []
+
+    def counting(args, cwd):
+        calls.append(args[0] if args[0] != "-c" else args[4])
+        return real(args, cwd)
+    monkeypatch.setattr(ledger_mod, "run_git", counting)
+    args = ledger_mod.build_parser().parse_args(
+        ["report", "--task", w, "--json", "--session", "t"])
+    rc = args.fn(args)
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0 and payload["data"]["commits"]["final_commit"] == head
+    assert "merge-base" not in calls

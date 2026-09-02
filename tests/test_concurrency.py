@@ -129,3 +129,18 @@ def test_parallel_claims_on_one_resource_produce_one_holder(plain):
             why = {w["id"]: w["ineligible_because"] for w in p["data"]["why"]}
             assert why[other].startswith("resource full-suite held by " + won)
             assert p["data"]["resources_held"] == {"full-suite": won}
+
+
+
+def test_lock_handles_are_keyed_per_ledger_directory(ledger_mod, tmp_path):
+    """An embedding host driving two ledgers from one process must lock
+    both (sweep 2026-09-02, task F)."""
+    a = tmp_path / "a" / ".ledger"
+    b = tmp_path / "b" / ".ledger"
+    a.mkdir(parents=True)
+    b.mkdir(parents=True)
+    ledger_mod._acquire_mutation_lock(a)
+    ledger_mod._acquire_mutation_lock(b)
+    assert (a / ".lock").exists() and (b / ".lock").exists()
+    assert len({k for k in ledger_mod._LOCK_HANDLES
+                if k.startswith(str(tmp_path.resolve()))}) == 2
