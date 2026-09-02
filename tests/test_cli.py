@@ -759,7 +759,8 @@ def test_list_mine_and_next_held(repo):
 
 def test_next_skips_held_resources_and_falls_through(repo):
     from test_hardening import set_stale_days
-    holder = repo.add_task("Uses the GPU", "-p", "p1", "--tag", "resource:gpu")
+    # p0 vs p1: same-second creation would otherwise tie and sort by random id
+    holder = repo.add_task("Uses the GPU", "-p", "p0", "--tag", "resource:gpu")
     waiter = repo.add_task("Also needs the GPU", "-p", "p1", "--tag",
                            "resource:gpu", "--tag", "resource:db")
     free = repo.add_task("No resources", "-p", "p2")
