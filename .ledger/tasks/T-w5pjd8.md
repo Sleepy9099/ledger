@@ -1,10 +1,12 @@
 ---
 id: T-w5pjd8
 title: Step outcome suffix (MOOT/DELEGATED/REJECTED): implement only if observed
-status: todo
+status: in_progress
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T03:28:12Z
 tags: format
 ---
 
@@ -36,8 +38,8 @@ tests/test_format.py: each OUTCOME parses into outcome / outcome_note / base tex
 
 ## Next Steps
 
-- [ ] Human confirms B (or A/C); unblock
-- [ ] Phase 0 (any time): regression test pinning that a `-- WORD: note` suffix stays strict-clean; one DESIGN §2 sentence
+- [x] Human confirms B (or A/C); unblock
+- [x] Phase 0 (any time): regression test pinning that a `-- WORD: note` suffix stays strict-clean; one DESIGN §2 sentence
 - [ ] When triggered: STEP_OUTCOME_RE, steps() keys, step check flags, docs, tests
 
 ## Open Questions
@@ -56,3 +58,6 @@ tests/test_format.py: each OUTCOME parses into outcome / outcome_note / base tex
 - 2026-09-01T23:48:48Z [claude-2026-09-01-a] block: on human — decision recorded in Open Questions; do not implement until answered
 - 2026-09-02T00:54:59Z [claude-2026-09-01-b] answer: 'HUMAN: Step outcomes: (A) nothing — agents may annotate `- [x] text -- MOOT: reason` as free text (already legal and strict-clean) and record the why with `ledger note`; drop this task. (B) keep this p3 observe-first task holding the parsed-suffix design, implement only after a real misread is recorded; land the Phase-0 regression pin now. (C) implement the suffix parsing now. Recommendation: B — it costs one task file, leaves DESIGN §2 unchanged until there is evidence (review §21's own rule), and durably records that the marker-character alternatives ([~], [-], [X]) fail strict CI.' -> (B) keep the parsed-suffix design gated on an observed misread; land the Phase-0 regression pin now. Operator criteria: a vocabulary nobody has needed is maintenance without payoff, while the pin protects the free-text form agents can already use.
 - 2026-09-02T00:54:59Z [claude-2026-09-01-b] unblock: -> todo
+- 2026-09-02T03:28:12Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T03:29:11Z [claude-2026-09-01-b] step: checked 'Human confirms B (or A/C); unblock'
+- 2026-09-02T03:29:11Z [claude-2026-09-01-b] step: checked 'Phase 0 (any time): regression test pinning that a `-- WORD: note` suffix stays strict-clean; one DESIGN §2 sentence'

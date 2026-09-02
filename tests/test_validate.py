@@ -250,3 +250,34 @@ def test_stale_claim_covers_claim_retaining_blocked_tasks(repo):
     assert "stale-block" not in codes(payload)  # a human block is not a handoff
     repo.j("release", tid, "--blocked", "--on", "human", "--force")
     rc, payload = validate(repo, "--no-git", "--strict", expect=0)
+
+
+
+def test_step_outcome_suffix_is_free_text_and_strict_clean(repo):
+    """Phase-0 pin for T-w5pjd8: `- [x] text -- MOOT: reason` is the one
+    grammar-compatible step annotation. Nobody may later tighten the
+    checkbox grammar into rejecting it; marker characters DO fail."""
+    tid = repo.add_task("Annotated steps")
+    repo.j("step", tid, "add", "wire the cache")
+    repo.j("step", tid, "add", "measure it")
+    text = repo.read(tid).replace(
+        "- [ ] wire the cache", "- [x] wire the cache -- MOOT: cache removed"
+    ).replace("- [ ] measure it", "- [ ] measure it -- DELEGATED: T-abc123")
+    repo.write(tid, text)
+    steps = repo.j("show", tid)["data"]["next_steps"]
+    assert steps[0]["done"] and steps[0]["text"].endswith("MOOT: cache removed")
+    assert not steps[1]["done"]
+    rc, payload = validate(repo, "--no-git", "--strict", expect=0)
+    assert "checkbox-grammar" not in codes(payload)
+    # round-trips byte-for-byte through uncheck / check
+    before = repo.read(tid)
+    repo.j("step", tid, "uncheck", "cache")
+    repo.j("step", tid, "check", "cache")
+    after = repo.read(tid)
+    assert after.split("## Log")[0] == before.split("## Log")[0]
+    assert repo.j("step", tid, "check", "T-abc123")["ok"]  # selector by id
+    # the improvised marker characters are the thing that fails
+    repo.write(tid, repo.read(tid).replace("- [x] measure it",
+                                           "- [~] measure it"))
+    rc, payload = validate(repo, "--no-git", "--strict", expect=1)
+    assert "checkbox-grammar" in codes(payload, "error")

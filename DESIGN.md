@@ -102,7 +102,10 @@ There is **no `updated` field** — it would conflict on every concurrent edit.
 ### Body sections (fixed order; empty sections keep their heading)
 
 - `## Spec` — free Markdown; the durable what/why/acceptance criteria.
-- `## Next Steps` — `- [ ]` / `- [x]` checkboxes; the resume-point.
+- `## Next Steps` — `- [ ]` / `- [x]` checkboxes; the resume-point. A
+  trailing `-- WORD: note` (`- [x] text -- MOOT: superseded by T-x`) is free
+  text the tool preserves; prefer it over improvised marker characters
+  (`[~]`, `[-]`, `[X]`), which `checkbox-grammar` rejects under strict CI.
 - `## Open Questions` — checkboxes. `HUMAN:` prefix = operator-gated (blocks
   `done`); answered form: `- [x] text -- ANSWERED (YYYY-MM-DD): answer`.
   No question numbering (numbers duplicate under merges); the CLI addresses
