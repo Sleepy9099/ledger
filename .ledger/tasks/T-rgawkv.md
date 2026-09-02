@@ -1,12 +1,11 @@
 ---
 id: T-rgawkv
 title: HITL authority: document that answers are session-recorded, not proven human; operator-only command split is host-specific
-status: in_progress
+status: done
 priority: p3
 size: xs
 created: 2026-09-02T04:51:27Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T05:14:14Z
+closed: 2026-09-02T05:14:15Z
 tags: human-decisions, docs
 ---
 
@@ -26,7 +25,11 @@ Docs only now: README (questions/answers section) and DESIGN §3 trust model sta
 
 ## Commits
 
+- b755b0c 2026-09-02 State the HITL trust boundary plainly
+
 ## Log
 
 - 2026-09-02T04:51:27Z [claude-2026-09-01-b] add: created: HITL authority: document that answers are session-recorded, not proven human; operator-only command split is host-specific [p3/xs] (tags: human-decisions, docs)
 - 2026-09-02T05:14:14Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T05:14:15Z [claude-2026-09-01-b] link: b755b0c State the HITL trust boundary plainly
+- 2026-09-02T05:14:15Z [claude-2026-09-01-b] done: evidence: b755b0c
