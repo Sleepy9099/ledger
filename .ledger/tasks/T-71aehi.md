@@ -1,12 +1,11 @@
 ---
 id: T-71aehi
 title: drop --duplicate-of / --superseded-by: machine-visible closed relations
-status: in_progress
+status: done
 priority: p2
 size: s
 created: 2026-09-01T23:48:39Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T00:35:13Z
+closed: 2026-09-02T00:43:42Z
 tags: discovery, ontology
 ---
 
@@ -50,6 +49,8 @@ Older validators parse the line as an ordinary `drop` event; `closed_relation` i
 
 ## Commits
 
+- 88863da 2026-09-01 Add drop --duplicate-of / --superseded-by: machine-visible closed relations
+
 ## Log
 
 - 2026-09-01T23:48:39Z [claude-2026-09-01-a] add: created: drop --duplicate-of / --superseded-by: machine-visible closed relations
@@ -62,3 +63,5 @@ Older validators parse the line as an ordinary `drop` event; `closed_relation` i
 - 2026-09-02T00:43:25Z [claude-2026-09-01-b] step: checked 'Task.closed_relation() (max-timestamp rule) + closed_relation in task_brief/task_full + absorbed in show'
 - 2026-09-02T00:43:25Z [claude-2026-09-01-b] step: checked 'Downstream hints (drop dependents fix_hint, next why text), human line, docs (README, DESIGN §2/§5, PROTOCOL_TEXT drop line via init)'
 - 2026-09-02T00:43:26Z [claude-2026-09-01-b] step: checked 'Tests in test_cli/test_hardening/test_format/test_property'
+- 2026-09-02T00:43:42Z [claude-2026-09-01-b] link: 88863da Add drop --duplicate-of / --superseded-by: machine-visible closed relations
+- 2026-09-02T00:43:42Z [claude-2026-09-01-b] done: evidence: 88863da
