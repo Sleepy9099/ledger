@@ -1,12 +1,11 @@
 ---
 id: T-naq65o
 title: done: warn when depends_on still lists open tasks
-status: in_progress
+status: done
 priority: p2
 size: xs
 created: 2026-09-01T23:48:39Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T01:20:47Z
+closed: 2026-09-02T01:25:32Z
 tags: orchestration, coherence
 ---
 
@@ -48,6 +47,8 @@ W --after A --after B --after C; claim A; drop C; `done W --no-code "x"` → exa
 
 ## Commits
 
+- abe2399 2026-09-01 done warns when depends_on still lists open tasks
+
 ## Log
 
 - 2026-09-01T23:48:39Z [claude-2026-09-01-a] add: created: done: warn when depends_on still lists open tasks
@@ -62,3 +63,5 @@ W --after A --after B --after C; claim A; drop C; `done W --no-code "x"` → exa
 - 2026-09-02T01:20:47Z [claude-2026-09-01-b] step: checked 'Human answers warn/refuse and the dropped-dep question; unblock'
 - 2026-09-02T01:25:19Z [claude-2026-09-01-b] step: checked 'cmd_done: load_all_tasks once, append the done-loose-ends warning with per-dep status details'
 - 2026-09-02T01:25:19Z [claude-2026-09-01-b] step: checked 'DESIGN §5 done bullet and §6 note; self-contained test in tests/test_cli.py'
+- 2026-09-02T01:25:32Z [claude-2026-09-01-b] link: abe2399 done warns when depends_on still lists open tasks
+- 2026-09-02T01:25:32Z [claude-2026-09-01-b] done: evidence: abe2399
