@@ -1,12 +1,11 @@
 ---
 id: T-ledxp4
 title: Closed is terminal: done refuses every strict-CI-failing state; post-close mutations limited to an allowlist
-status: in_progress
+status: done
 priority: p1
 size: s
 created: 2026-09-02T04:51:26Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T04:51:27Z
+closed: 2026-09-02T04:56:41Z
 tags: lifecycle, integrity
 ---
 
@@ -30,7 +29,11 @@ tags: lifecycle, integrity
 
 ## Commits
 
+- 9ed5721 2026-09-01 Closed is terminal: done refuses every strict-CI-failing state
+
 ## Log
 
 - 2026-09-02T04:51:26Z [claude-2026-09-01-b] add: created: Closed is terminal: done refuses every strict-CI-failing state; post-close mutations limited to an allowlist [p1/s] (tags: lifecycle, integrity)
 - 2026-09-02T04:51:27Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T04:56:41Z [claude-2026-09-01-b] link: 9ed5721 Closed is terminal: done refuses every strict-CI-failing state
+- 2026-09-02T04:56:41Z [claude-2026-09-01-b] done: evidence: 9ed5721
