@@ -20,3 +20,17 @@ def test_this_repos_ledger_is_valid():
         cwd=str(ROOT), capture_output=True, text=True)
     payload = json.loads(r.stdout)
     assert r.returncode == 0, json.dumps(payload["errors"], indent=2)
+
+
+def test_ci_workflow_keeps_the_cross_platform_claim_true():
+    """The GitHub Actions matrix is what makes the README's cross-platform
+    and full-history claims continuously true; pin the load-bearing parts
+    so a casual edit cannot silently shrink them."""
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8")
+    assert "fetch-depth: 0" in workflow      # validate refuses shallow clones
+    assert "python -m pytest" in workflow
+    for runner in ("ubuntu-latest", "windows-latest"):
+        assert runner in workflow
+    for version in ('"3.10"', '"3.14"'):
+        assert version in workflow
