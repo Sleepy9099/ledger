@@ -1,10 +1,12 @@
 ---
 id: T-dv4vku
 title: fix_hint audit: done-evidence reopen clause, xl-open size, why retrieve_with, indexed done hints, done-loose-ends validate hint, task-null reason, refused done reports links
-status: todo
+status: in_progress
 priority: p2
 size: xs
 created: 2026-09-02T11:44:58Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T12:20:37Z
 tags: ergonomics
 ---
 
@@ -30,3 +32,4 @@ Tests for each.
 ## Log
 
 - 2026-09-02T11:44:58Z [claude-2026-09-01-b] add: created: fix_hint audit: done-evidence reopen clause, xl-open size, why retrieve_with, indexed done hints, done-loose-ends validate hint, task-null reason, refused done reports links [p2/xs] (tags: ergonomics)
+- 2026-09-02T12:20:37Z [claude-2026-09-01-b] claim: claimed

@@ -2210,8 +2210,7 @@ def cmd_next(args) -> int:
             truncated[name] = meta
         return kept
 
-    why = cap("why", why, "ledger list --status todo --status blocked "
-                          "--status in_progress --json")
+    why = cap("why", why, "ledger next --full --json")
     human_blocked = cap("blocked_on_human", human_blocked,
                         "ledger questions --human --json")
     stale_blocks = cap("stale_blocks", stale_blocks,
@@ -2219,7 +2218,13 @@ def cmd_next(args) -> int:
 
     if not eligible:
         held = cap("held", held_by_me(None), "ledger list --mine --json")
-        data = {"task": None, "claimed": False, "why": why,
+        if not tasks:
+            reason = "no tasks in the ledger"
+        elif not any(t.status in OPEN_STATUSES for t in pool):
+            reason = "every task is closed"
+        else:
+            reason = "every open task is ineligible — see why"
+        data = {"task": None, "claimed": False, "reason": reason, "why": why,
                 "blocked_on_human": human_blocked,
                 "stale_blocks": stale_blocks, "held": held,
                 "resources_held": resources_held,
@@ -2228,7 +2233,7 @@ def cmd_next(args) -> int:
             data["truncated"] = truncated
         return emit_read(
             args, data, problems,
-            ["nothing eligible"] +
+            [f"nothing eligible: {reason}"] +
             [f"  {w['id']}: {w['ineligible_because']}" for w in why]
             + held_lines(held) + truncation_lines(truncated))
     top, flag = eligible[0]
@@ -3271,9 +3276,9 @@ def cmd_done(args) -> int:
     _guard_foreign_claim(ctx, task, args.force, "closing")
     repo = ctx.repo
 
-    linked_any = False
+    linked_now: list[str] = []
     if args.commit:
-        linked_any = bool(_link_commits(ctx, task, args.commit)) or linked_any
+        linked_now += [i["sha7"] for i in _link_commits(ctx, task, args.commit)]
     if repo is not None:
         commits, _error = walk_commits(repo, ctx.config.get("baseline"))
         if commits:
@@ -3282,8 +3287,8 @@ def cmd_done(args) -> int:
                     if task.append_commit_line(c.sha7, c.date, c.subject):
                         task.append_log(ctx.actor, "link",
                                         f"{c.sha7} (backfilled from trailer)")
-                        linked_any = True
-    if linked_any:
+                        linked_now.append(c.sha7)
+    if linked_now:
         save_task(task)  # keep evidence links even if the close is refused
 
     refusals = []
@@ -3304,9 +3309,9 @@ def cmd_done(args) -> int:
             "done-human-questions",
             f"unanswered HUMAN question: {q['text']}",
             task=task.id,
-            fix_hint=f"ledger question {task.id} resolve <n> --answer \"...\" "
-                     "once the human answers (\"moot: <why>\" if it no "
-                     "longer applies)"))
+            fix_hint=f"ledger question {task.id} resolve {q['n']} --answer "
+                     "\"...\" once the human answers (\"moot: <why>\" if it "
+                     "no longer applies)"))
     open_steps = [s for s in task.steps() if not s["done"]]
     if open_steps:
         refusals.append(err(
@@ -3314,9 +3319,10 @@ def cmd_done(args) -> int:
             f"{len(open_steps)} unchecked next step(s): "
             + "; ".join(f"#{s['n']} {s['text'][:40]}" for s in open_steps[:3]),
             task=task.id,
-            fix_hint=f"ledger step {task.id} check <n> (append `-- MOOT: "
-                     "reason` to the line if it was overtaken), or delete "
-                     "the stale line — Next Steps must reflect reality"))
+            fix_hint=f"ledger step {task.id} check {open_steps[0]['n']} "
+                     "(append `-- MOOT: reason` to the line if it was "
+                     "overtaken), or delete the stale line — Next Steps must "
+                     "reflect reality"))
     open_q = [q for q in task.questions() if not q["answered"] and not q["human"]]
     if open_q:
         refusals.append(err(
@@ -3324,10 +3330,18 @@ def cmd_done(args) -> int:
             f"{len(open_q)} unanswered question(s): "
             + "; ".join(q["text"][:40] for q in open_q[:3]),
             task=task.id,
-            fix_hint=f"ledger question {task.id} resolve <n> --answer "
-                     "\"...\", or delete the line if it no longer matters"))
+            fix_hint=f"ledger question {task.id} resolve {open_q[0]['n']} "
+                     "--answer \"...\", or delete the line if it no longer "
+                     "matters"))
     if refusals:
-        emit(args, False, {"id": task.id}, errors=refusals)
+        # evidence linked in this run stays (a rebase-safe record); say so,
+        # and name the undo for the wrong-commit case
+        if linked_now:
+            refusals[0]["fix_hint"] += (
+                f" (this run linked {', '.join(linked_now)} — ledger unlink "
+                f"{task.id} <sha> if that was the wrong commit)")
+        emit(args, False, {"id": task.id, "linked": linked_now},
+             errors=refusals)
         return 2
 
     warnings = []
@@ -3692,8 +3706,10 @@ def validate_offline(ctx: Ctx) -> list[dict]:
                     "done-evidence",
                     "done task has neither linked commits nor a "
                     "done(no-code) reason", task=tid,
-                    fix_hint="ledger link <id> <sha>, or reopen and close "
-                             "properly with ledger done"))
+                    fix_hint="ledger link <id> <sha> (allowed on closed "
+                             "tasks); if there genuinely is no commit the "
+                             "task should have been closed with --no-code — "
+                             "closed is terminal, a redo is a new task"))
             unanswered_human = [q for q in task.questions()
                                 if q["human"] and not q["answered"]]
             if unanswered_human:
@@ -3707,7 +3723,12 @@ def validate_offline(ctx: Ctx) -> list[dict]:
                 violations.append(err(
                     "done-loose-ends",
                     "done task has unchecked steps or unanswered questions",
-                    task=tid, severity="warning"))
+                    task=tid, severity="warning",
+                    fix_hint="ledger step <id> check <n> (append `-- MOOT: "
+                             "reason` to the line if it was overtaken), "
+                             "ledger question <id> resolve <n> --answer, or "
+                             "delete the stale line — both verbs work on "
+                             "closed tasks; prose is free-edit"))
         # a blocked task that RETAINED its claim (block keeps claimed_by)
         # ages exactly like an in_progress one: a vanished worker must not
         # hold a claim forever behind a block
@@ -3739,7 +3760,9 @@ def validate_offline(ctx: Ctx) -> list[dict]:
                 "xl-open", "open task is size xl — split it", task=tid,
                 severity="warning",
                 fix_hint="ledger add the parts, then ledger set <id> "
-                         "--add-depends <parts>; or drop this and re-add smaller"))
+                         "--add-depends <parts> --size l (the umbrella "
+                         "shrinks once the parts carry the work); or drop "
+                         "this and re-add smaller"))
         # near-miss checkbox lines silently escape the steps/questions
         # machinery — and with it the HUMAN-question done gate
         for section_name in ("Next Steps", "Open Questions"):

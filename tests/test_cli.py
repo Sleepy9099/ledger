@@ -1038,15 +1038,14 @@ def test_next_lists_are_bounded_and_full_is_not(repo):
     assert len(d["why"]) == 30 and len(d["blocked_on_human"]) == 20
     assert d["truncated"]["why"] == {
         "total": 35, "omitted": 5,
-        "retrieve_with": "ledger list --status todo --status blocked "
-                         "--status in_progress --json"}
+        "retrieve_with": "ledger next --full --json"}
     assert d["truncated"]["blocked_on_human"]["omitted"] == 15
     assert "questions --human" in d["truncated"]["blocked_on_human"][
         "retrieve_with"]
     kept = {w["id"] for w in d["why"]}
     assert all(prio == "p1" for t, prio in blocked if t in kept)  # least urgent cut
     r = repo.run("next")
-    assert "(+5 more: ledger list" in r.stdout
+    assert "(+5 more: ledger next --full" in r.stdout
     full = repo.j("next", "--full")["data"]
     assert len(full["why"]) == 35 and "truncated" not in full
     free = repo.add_task("Eligible", "-p", "p0")
@@ -1269,3 +1268,52 @@ def test_every_cli_code_is_documented_in_the_readme(ledger_mod):
     missing = sorted(c for c in codes - set(ledger_mod.VALIDATION_CODES)
                      if f"`{c}`" not in readme)
     assert missing == [], missing
+
+
+
+# --- fix_hint audit (sweep 2026-09-02, task J) -------------------------------
+
+def test_hints_name_real_commands_and_indexes(repo):
+    from conftest import LedgerRepo, _isolated_env
+    # next with nothing at all explains itself
+    d = repo.j("next")["data"]
+    assert d["task"] is None and d["reason"] == "no tasks in the ledger"
+    t = repo.add_task("Only")
+    repo.j("done", t, "--no-code", "x")
+    assert repo.j("next")["data"]["reason"] == "every task is closed"
+    b = repo.add_task("Blocked one")
+    repo.j("block", b, "--on", "human")
+    assert "ineligible" in repo.j("next")["data"]["reason"]
+    # done's hints carry the real indexes and report what they linked
+    tid = repo.add_task("Indexed hints")
+    repo.j("step", tid, "add", "first step")
+    repo.j("step", tid, "check", "1")
+    repo.j("step", tid, "add", "second step")
+    repo.j("question", tid, "add", "plain?")
+    repo.j("question", tid, "add", "gate?", "--human")
+    (repo.root / "h.py").write_text("h\n", encoding="utf-8")
+    sha = repo.commit_all("Untrailered evidence")
+    d = repo.j("done", tid, "--commit", "HEAD", expect=2)
+    hints = "\n".join(e["fix_hint"] for e in d["errors"])
+    assert f"ledger step {tid} check 2" in hints
+    assert f"ledger question {tid} resolve 1 --answer" in hints  # plain? is #1
+    assert f"ledger question {tid} resolve 2 --answer" in hints  # gate? is #2
+    assert d["data"]["linked"] == [sha[:7]]
+    assert f"ledger unlink {tid}" in d["errors"][0]["fix_hint"]
+    # validate's hints
+    xl = repo.add_task("Whale", "-s", "xl")
+    loose = repo.add_task("Loose done")
+    repo.j("done", loose, "--no-code", "x")
+    repo.write(loose, repo.read(loose).replace(
+        "## Next Steps\n", "## Next Steps\n\n- [ ] forgotten\n"))
+    evid = repo.add_task("No evidence")
+    repo.j("done", evid, "--no-code", "x")
+    repo.write(evid, "\n".join(l for l in repo.read(evid).split("\n")
+                               if "done(no-code)" not in l)
+               .replace("## Log\n", "## Log\n\n- 2026-01-01T00:00:00Z [x] done: evidence: none\n"))
+    v = json.loads(repo.run("validate", "--no-git", "--json").stdout)
+    by_code = {e["code"]: e for e in v["errors"]}
+    assert "--size l" in by_code["xl-open"]["fix_hint"]
+    assert "MOOT" in by_code["done-loose-ends"]["fix_hint"]
+    assert "reopen" not in by_code["done-evidence"]["fix_hint"]
+    assert "ledger link" in by_code["done-evidence"]["fix_hint"]
