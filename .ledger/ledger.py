@@ -908,9 +908,39 @@ def classify_commit(commit: Commit, repo: Path, known_ids: set[str],
     files = commit_files(repo, commit.sha, merge=len(commit.parents) > 1)
     if files is None:
         return "unlinked", dangling  # git failed: never exempt on a guess
-    if not files or all(f.startswith(".ledger/") for f in files):
+    if not files or all(is_bookkeeping_path(f) for f in files):
         return "exempt", dangling
     return "unlinked", dangling
+
+
+def is_bookkeeping_path(path: str) -> bool:
+    """Ledger BOOKKEEPING only: task files, the init-generated protocol
+    copy, the lock. `.ledger/ledger.py` is executable code and
+    `.ledger/config.json` is policy — both need a trailer or an explicit
+    exemption (a host's `Ledger-Exempt: re-vendor ledger.py`)."""
+    return (path.startswith(".ledger/tasks/")
+            or path in (".ledger/PROTOCOL.md", ".ledger/.lock"))
+
+
+def exempt_channel(commit: Commit, exempt_res: list[re.Pattern]) -> str:
+    """Which channel exempted a commit: explicit trailer, subject pattern,
+    or bookkeeping paths — reported separately so closure commits cannot
+    dilute trailer abuse in the ratio."""
+    if commit.exempt_reason is not None:
+        return "trailer"
+    if any(p.search(commit.subject) for p in exempt_res):
+        return "pattern"
+    return "bookkeeping"
+
+
+def policy_applies_to(commit: Commit, repo: Path, since: str | None) -> bool:
+    """exempt_policy_since is forward-only: commits that are ancestors of
+    (or equal to) it are never path-checked, so adopting the policy never
+    rewrites history."""
+    if not since:
+        return True
+    rc, _ = run_git(["merge-base", "--is-ancestor", commit.sha, since], repo)
+    return rc != 0
 
 
 # ---------------------------------------------------------------------------
@@ -1672,8 +1702,19 @@ def cmd_init(args) -> int:
         config["exempt_allowed_paths"] = list(DEFAULT_EXEMPT_ALLOWED_PATHS)
         atomic_write(cfg_path, json.dumps(config, indent=2))
     else:
+        stored = json.loads(cfg_path.read_text(encoding="utf-8"))
+        if (getattr(args, "enable_exempt_policy", False)
+                and stored.get("exempt_allowed_paths") is None):
+            # the ONE config write on an existing repo, behind an explicit
+            # operator flag: forward-only from HEAD, so history stays green
+            stored["exempt_allowed_paths"] = list(DEFAULT_EXEMPT_ALLOWED_PATHS)
+            head_repo = git_toplevel(ledger_dir.parent)
+            head = git_head(head_repo) if head_repo else None
+            if head:
+                stored["exempt_policy_since"] = head
+            atomic_write(cfg_path, json.dumps(stored, indent=2))
         config = dict(DEFAULT_CONFIG)
-        config.update(json.loads(cfg_path.read_text(encoding="utf-8")))
+        config.update(stored)
 
     atomic_write(ledger_dir / "PROTOCOL.md", PROTOCOL_TEXT)
 
@@ -1723,7 +1764,10 @@ def cmd_init(args) -> int:
     ]
     emit(args, True, {"ledger_dir": str(ledger_dir),
                       "baseline": config.get("baseline"),
-                      "created": created, "ci_snippet": CI_SNIPPET},
+                      "created": created, "ci_snippet": CI_SNIPPET,
+                      "exempt_policy": {
+                          "active": config.get("exempt_allowed_paths") is not None,
+                          "since": config.get("exempt_policy_since")}},
          human=human)
     return 0
 
@@ -2678,9 +2722,11 @@ def cmd_scan(args) -> int:
         raise LedgerError("coverage", error or "git walk failed")
     exempt_res = compile_exempt_patterns(ctx.config)
     policy = exempt_policy_globs(ctx.config)
+    since = ctx.config.get("exempt_policy_since") or None
     explicit = explicit_links(tasks)
     id_token_re = id_token_pattern(ctx.prefix)
     linked, exempt, unlinked, dangling, policy_violations = [], [], [], [], []
+    by_channel = {"trailer": 0, "pattern": 0, "bookkeeping": 0}
     for c in commits:
         bucket, bad_ids = classify_commit(c, repo, known, exempt_res, explicit)
         for raw in bad_ids:
@@ -2697,8 +2743,10 @@ def cmd_scan(args) -> int:
                     linked.append({"sha": c.sha7, "task": tid, "via": "link"})
         elif bucket == "exempt":
             exempt.append(c.sha7)
+            by_channel[exempt_channel(c, exempt_res)] += 1
             bad = (exempt_policy_offenders(c, repo, policy, exempt_res)
-                   if policy is not None else None)
+                   if policy is not None and policy_applies_to(c, repo, since)
+                   else None)
             if bad:
                 policy_violations.append({"sha": c.sha7, "paths": bad})
         else:
@@ -2725,6 +2773,7 @@ def cmd_scan(args) -> int:
             "dangling": dangling, "backfilled": backfilled,
             "commits_scanned": len(commits),
             "exempt_policy_violations": policy_violations,
+            "exempt_by_channel": by_channel,
             "similar_open_pairs": similar_pairs[:20]}
     human = [f"scanned {len(commits)} commit(s): {len(linked)} linked, "
              f"{len(exempt)} exempt, {len(unlinked)} unlinked, "
@@ -3414,9 +3463,11 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
 
     exempt_res = compile_exempt_patterns(ctx.config)
     policy = exempt_policy_globs(ctx.config)
+    since = ctx.config.get("exempt_policy_since") or None
     explicit = explicit_links(tasks)
     id_token_re = id_token_pattern(ctx.prefix)
     exempt_count = 0
+    channels = {"trailer": 0, "pattern": 0, "bookkeeping": 0}
     for c in commits:
         bucket, dangling = classify_commit(c, repo, known, exempt_res, explicit)
         # an explicit link is the corrected claim: the typo'd id stays in the
@@ -3427,10 +3478,12 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
                 violations.append(err("trailer-dangling", msg, fix_hint=hint))
         if bucket == "exempt":
             exempt_count += 1
+            channels[exempt_channel(c, exempt_res)] += 1
             # the commit stays exempt (so exempt-ratio is unchanged and
             # coverage never fires alongside): the abuse gets its own code
             bad = (exempt_policy_offenders(c, repo, policy, exempt_res)
-                   if policy is not None else None)
+                   if policy is not None and policy_applies_to(c, repo, since)
+                   else None)
             if bad:
                 violations.append(err(
                     "exempt-policy",
@@ -3447,7 +3500,9 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
     if commits:
         violations.append(err(
             "exempt-ratio",
-            f"{exempt_count}/{len(commits)} commit(s) in scope are exempt",
+            f"{exempt_count}/{len(commits)} commit(s) in scope are exempt "
+            f"(trailer {channels['trailer']}, pattern {channels['pattern']}, "
+            f"bookkeeping {channels['bookkeeping']})",
             severity="info"))
 
     # ---- log-tamper: append-only Log, verified HISTORICALLY ---------------
@@ -4112,7 +4167,20 @@ def cmd_doctor(args) -> int:
                 f"(protocol version {PROTOCOL_VERSION})", severity="warning",
                 fix_hint="run `python .ledger/ledger.py init` from the repo "
                          "root to regenerate it"))
+    policy_globs = ctx.config.get("exempt_allowed_paths")
+    exempt_policy = {"active": policy_globs is not None,
+                     "since": ctx.config.get("exempt_policy_since"),
+                     "globs": policy_globs}
+    if policy_globs is None:
+        errors.append(err(
+            "exempt-policy-off",
+            "exempt_allowed_paths is not set: a Ledger-Exempt commit may touch "
+            "any path (the pre-1.2 behavior)", severity="warning",
+            fix_hint="python .ledger/ledger.py init --enable-exempt-policy "
+                     "turns it on forward-only from HEAD; adjust the globs in "
+                     ".ledger/config.json as a project decision"))
     data = {
+        "exempt_policy": exempt_policy,
         "tool_version": TOOL_VERSION,
         "schema_version": SCHEMA_VERSION,
         "protocol_version": PROTOCOL_VERSION,
@@ -4138,6 +4206,9 @@ def cmd_doctor(args) -> int:
         + (" (running it)" if running_is_vendored else ""),
         "protocol files: " + ", ".join(
             f"{k} {'in sync' if v else 'STALE'}" for k, v in in_sync.items()),
+        "exemption policy: " + (
+            f"active (since {exempt_policy['since'] or 'baseline'})"
+            if exempt_policy["active"] else "OFF"),
     ]
     emit(args, compatible, data, errors=errors + problems, human=human)
     return 0 if compatible else 1
@@ -4171,6 +4242,10 @@ def build_parser() -> Parser:
 
     p = sub.add_parser("init", parents=[common], help="scaffold .ledger/")
     p.add_argument("--prefix", default=None, help="task id prefix (default T)")
+    p.add_argument("--enable-exempt-policy", action="store_true",
+                   help="on an existing repo: write the default "
+                        "exempt_allowed_paths and exempt_policy_since=HEAD "
+                        "(forward-only; the only config write after init)")
     p.set_defaults(fn=cmd_init)
 
     p = sub.add_parser("add", parents=[common], help="create a task")

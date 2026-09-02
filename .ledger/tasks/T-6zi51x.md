@@ -1,10 +1,12 @@
 ---
 id: T-6zi51x
 title: Exemption policy migration: forward-only activation, doctor visibility, bookkeeping vs executable ledger paths, ratio by channel
-status: todo
+status: in_progress
 priority: p1
 size: m
 created: 2026-09-02T04:51:26Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T05:04:50Z
 tags: integrity
 ---
 
@@ -32,3 +34,4 @@ exempt_allowed_paths is written by init into NEW config files only; re-vendoring
 ## Log
 
 - 2026-09-02T04:51:26Z [claude-2026-09-01-b] add: created: Exemption policy migration: forward-only activation, doctor visibility, bookkeeping vs executable ledger paths, ratio by channel [p1/m] (tags: integrity)
+- 2026-09-02T05:04:50Z [claude-2026-09-01-b] claim: claimed

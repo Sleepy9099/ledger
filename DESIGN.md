@@ -62,7 +62,8 @@ state is either a per-task file or git history itself (the gitignored
   "exempt_patterns": ["^Merge ", "^Revert "],
   "exempt_allowed_paths": ["docs/**", "*.md", ".github/**", ".gitignore",
                            ".gitattributes", "LICENSE*", "*.lock",
-                           "package-lock.json", "tests/test_ledger.py"]
+                           "package-lock.json", "tests/test_ledger.py"],
+  "exempt_policy_since": "<sha written by init --enable-exempt-policy: older commits are not path-checked>"
 }
 ```
 
@@ -188,12 +189,23 @@ git failure lists an offender rather than guessing. Single-parent pattern
 exemptions (`^Revert`, squash merges) are not path-checked — a documented
 gap. The taxonomy lives in the fix_hint, where agents read it at the moment
 of violation; widening the list is a HUMAN decision, never an agent edit.
+Migration (2026-09-02): existing adopters get the policy only through the
+explicit `init --enable-exempt-policy`, which writes the default globs and
+`exempt_policy_since = HEAD`; commits that are ancestors of that sha are
+never path-checked (forward-only, no history rewrite) and `doctor` reports
+`exempt-policy-off` until then. The implicit path exemption covers ledger
+BOOKKEEPING only — `.ledger/tasks/**`, `PROTOCOL.md`, the lock file —
+because `.ledger/ledger.py` is executable code and `config.json` is policy:
+both need a trailer or an explicit exemption (`.ledger/**` stays in the
+allowed globs so a host's `Ledger-Exempt: re-vendor ledger.py` passes).
+The exempt ratio is reported per channel (trailer / pattern / bookkeeping)
+so closure commits cannot dilute trailer abuse.
 This scopes EXEMPTIONS, not coverage (decision #11 stands): it can only
 make the guarantee stricter.
 
 **Reconciliation:** `ledger scan` classifies every commit in `baseline..HEAD`
 as **linked** / **exempt** (Ledger-Exempt, `exempt_patterns` match, or touches
-only `.ledger/`) / **unlinked** / **dangling** (trailer names a nonexistent
+only ledger bookkeeping paths) / **unlinked** / **dangling** (trailer names a nonexistent
 id). `scan --write` backfills `## Commits` lines from trailers — a trailer IS
 an explicit claim, so backfilling is not fabricated evidence. *Inferred*
 linkage (branch names, file overlap) is banned. Root commits diff against the
@@ -596,7 +608,8 @@ deterministic token-overlap hint; a model's opinion must never gate CI).
     beat an overloaded one; a second inline `[T-x]` syntax was cut (one
     canonical channel stays honest).
 11. **Coverage scope:** EVERY commit in `baseline..HEAD` needs a trailer, an
-    exemption, or to touch only `.ledger/` — path-glob scoping silently
+    exemption, or to touch only ledger bookkeeping paths (`.ledger/tasks/**`,
+    `PROTOCOL.md`; since 2026-09-02 not `ledger.py` or `config.json`) — path-glob scoping silently
     shrinks the guarantee. (`exempt_allowed_paths`, 2026-09-01, scopes which
     commits may claim EXEMPT, not which need a trailer — it only ever makes
     the guarantee stricter.)

@@ -71,8 +71,11 @@ and the vendored `.ledger/ledger.py` differ (`vendored-stale`); re-run
 - **Commit trailers are the audit truth**: every commit that advances a task
   ends with `Ledger-Task: T-xxxxxx`; genuinely unrelated commits carry
   `Ledger-Exempt: <reason>`. `validate --coverage` walks `baseline..HEAD` and
-  fails on any commit with neither (commits touching only `.ledger/` and
-  subjects matching `exempt_patterns` in config.json are exempt). Forgot the
+  fails on any commit with neither (commits touching only ledger
+  bookkeeping — `.ledger/tasks/**`, `PROTOCOL.md` — and subjects matching
+  `exempt_patterns` in config.json are exempt; `.ledger/ledger.py` and
+  `config.json` are executable/policy files and need a trailer or an
+  explicit exemption such as `Ledger-Exempt: re-vendor ledger.py`). Forgot the
   trailer on a pushed commit? `ledger link <id> <sha>` — the sha-verified,
   actor-tagged link line counts as coverage; a hand-edited `## Commits` line
   alone never does.
@@ -197,7 +200,18 @@ trailer, and a `^Merge`-pattern TRUE merge via its combined diff, so an evil
 merge's conflict-resolution content counts — may touch only matching paths;
 anything else is an `exempt-policy` error naming the offending paths (the
 commit stays exempt, so `coverage` never fires alongside). Existing repos
-(key absent) are unchanged until they opt in. Glob rules: `dir/**` is a
+(key absent) are unchanged until they opt in: `ledger doctor` says so
+(`exempt-policy-off`), and `python .ledger/ledger.py init
+--enable-exempt-policy` turns it on FORWARD-ONLY — it writes the default
+globs plus `exempt_policy_since: <HEAD>`, and commits that are ancestors of
+that sha are never path-checked, so adopting the policy never rewrites
+history (commit that config change with a trailer or `Ledger-Exempt:
+enable exemption policy`). The exempt ratio is reported by channel
+(explicit trailer / subject pattern / bookkeeping paths), so a workflow
+that closes each task with a bookkeeping commit does not hide trailer
+abuse. If your Markdown carries runtime prompts or agent instructions,
+narrow `*.md` in `exempt_allowed_paths` (the init-generated CLAUDE.md /
+AGENTS.md blocks are bookkeeping either way). Glob rules: `dir/**` is a
 prefix, a glob containing `/` matches the full path (`*` and `?` never
 cross `/`, `**` does — gitignore-like, not fnmatch), a `/`-less glob
 matches the basename at any depth. Widening the list is a project decision

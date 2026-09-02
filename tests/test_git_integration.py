@@ -534,3 +534,87 @@ def test_non_ascii_paths_are_matched_unquoted(repo):
     rc, payload = validate(repo, "--coverage")
     pol = [e for e in payload["errors"] if e["code"] == "exempt-policy"]
     assert pol and "src/ä.py" in pol[-1]["message"]
+
+
+
+# --- exemption-policy migration (T-6zi51x) -----------------------------------
+
+def _set_policy_since(repo, sha):
+    cfg_path = repo.root / ".ledger" / "config.json"
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    cfg["exempt_policy_since"] = sha
+    cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+
+def test_policy_since_is_forward_only(repo):
+    (repo.root / "src").mkdir()
+    (repo.root / "src" / "old.py").write_text("o\n", encoding="utf-8")
+    old = repo.commit_all("Old exempt code", ("Ledger-Exempt: legacy",))
+    rc, payload = validate(repo, "--coverage")
+    assert any(e["code"] == "exempt-policy" and old[:7] in e["message"]
+               for e in payload["errors"])
+    _set_policy_since(repo, old)  # adopt the policy from here on
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]
+    (repo.root / "src" / "new.py").write_text("n\n", encoding="utf-8")
+    new = repo.commit_all("New exempt code", ("Ledger-Exempt: still legacy",))
+    rc, payload = validate(repo, "--coverage")
+    pol = [e for e in payload["errors"] if e["code"] == "exempt-policy"]
+    assert [new[:7] in e["message"] for e in pol] == [True]
+    assert repo.j("scan")["data"]["exempt_policy_violations"][0]["sha"] == new[:7]
+
+
+def test_doctor_reports_policy_and_init_enables_it_forward_only(repo):
+    _set_policy(repo, None)
+    d = repo.j("doctor")
+    assert d["data"]["exempt_policy"] == {"active": False, "since": None,
+                                          "globs": None}
+    off = [e for e in d["errors"] if e["code"] == "exempt-policy-off"]
+    assert off and off[0]["severity"] == "warning"
+    assert "--enable-exempt-policy" in off[0]["fix_hint"]
+    cfg_path = repo.root / ".ledger" / "config.json"
+    cfg_before = json.loads(cfg_path.read_text(encoding="utf-8"))
+    cfg_before["stale_claim_days"] = 3  # an unrelated key must survive
+    cfg_path.write_text(json.dumps(cfg_before, indent=2), encoding="utf-8")
+    head = repo.git("rev-parse", "HEAD").stdout.strip()
+    d = repo.j("init", "--enable-exempt-policy")
+    assert d["data"]["exempt_policy"]["active"] is True
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    assert cfg["exempt_policy_since"] == head
+    assert "docs/**" in cfg["exempt_allowed_paths"]
+    assert cfg["stale_claim_days"] == 3
+    after = cfg_path.read_bytes()
+    repo.j("init", "--enable-exempt-policy")  # idempotent
+    assert cfg_path.read_bytes() == after
+    d = repo.j("doctor")
+    assert d["data"]["exempt_policy"]["since"] == head
+    assert not any(e["code"] == "exempt-policy-off" for e in d["errors"])
+    # plain re-init never touches config.json
+    repo.j("init")
+    assert cfg_path.read_bytes() == after
+
+
+def test_only_bookkeeping_paths_are_implicitly_exempt(repo):
+    ledger_py = repo.root / ".ledger" / "ledger.py"
+    ledger_py.write_text(ledger_py.read_text(encoding="utf-8")
+                         + "\n# tweak\n", encoding="utf-8", newline="\n")
+    sha = repo.commit_all("Tweak the vendored tool")  # untrailered
+    rc, payload = validate(repo, "--coverage")
+    assert any(e["code"] == "coverage" and sha[:7] in e["message"]
+               for e in payload["errors"])
+    d = repo.j("scan")["data"]
+    assert any(u["sha"] == sha[:7] for u in d["unlinked"])
+    repo.j("add", "Bookkeeping only")
+    tasks_only = repo.commit_all("Record a task")
+    d = repo.j("scan")["data"]
+    assert tasks_only[:7] in d["exempt"]
+    assert d["exempt_by_channel"]["bookkeeping"] >= 1
+    rc, payload = validate(repo, "--coverage")
+    ratio = [e for e in payload["errors"] if e["code"] == "exempt-ratio"][0]
+    assert "bookkeeping" in ratio["message"] and "trailer" in ratio["message"]
+    # the host workflow for re-vendoring: an explicit exemption passes policy
+    ledger_py.write_text(ledger_py.read_text(encoding="utf-8")
+                         + "# tweak 2\n", encoding="utf-8", newline="\n")
+    repo.commit_all("Re-vendor the tool", ("Ledger-Exempt: re-vendor ledger.py",))
+    rc, payload = validate(repo, "--coverage")
+    assert not any(e["code"] == "exempt-policy" for e in payload["errors"])
