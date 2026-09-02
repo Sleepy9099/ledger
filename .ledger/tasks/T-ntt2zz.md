@@ -1,12 +1,11 @@
 ---
 id: T-ntt2zz
 title: ledger search: ranked text search across task files
-status: in_progress
+status: done
 priority: p2
 size: s
 created: 2026-09-01T23:48:39Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T01:48:18Z
+closed: 2026-09-02T01:54:39Z
 tags: discovery, ergonomics
 ---
 
@@ -64,6 +63,8 @@ No file-format, header, enum, Log or validate change. On a pre-search vendored c
 
 ## Commits
 
+- b2983cc 2026-09-01 Add ledger search: ranked text retrieval across task files
+
 ## Log
 
 - 2026-09-01T23:48:39Z [claude-2026-09-01-a] add: created: ledger search: ranked text search across task files
@@ -75,3 +76,5 @@ No file-format, header, enum, Log or validate change. On a pre-search vendored c
 - 2026-09-02T01:50:22Z [claude-2026-09-01-b] step: checked 'Implement cmd_search over load_all_tasks with raw-section fields, AND/--any, --regex, --in, --status/--open, -n, snippets'
 - 2026-09-02T01:50:22Z [claude-2026-09-01-b] step: checked 'Edit the 'Discover new work?' bullet in PROTOCOL_TEXT; re-run init in this repo; README Daily commands; DESIGN §5/§9 and Appendix decision 25'
 - 2026-09-02T01:50:22Z [claude-2026-09-01-b] step: checked 'tests/test_search.py plus envelope and lock-free list entries'
+- 2026-09-02T01:54:39Z [claude-2026-09-01-b] link: b2983cc Add ledger search: ranked text retrieval across task files
+- 2026-09-02T01:54:39Z [claude-2026-09-01-b] done: evidence: b2983cc
