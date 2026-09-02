@@ -1,10 +1,12 @@
 ---
 id: T-7xpvs1
 title: Session identity: per-call setting in the protocol, actor reported by next, fallback warning on claims, no anonymous claims, already-holding refusal
-status: todo
+status: in_progress
 priority: p1
 size: s
 created: 2026-09-02T11:44:58Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T11:55:01Z
 tags: protocol, ownership
 ---
 
@@ -30,3 +32,4 @@ In Claude Code / Codex every Bash call is a fresh shell, so "export a session id
 ## Log
 
 - 2026-09-02T11:44:58Z [claude-2026-09-01-b] add: created: Session identity: per-call setting in the protocol, actor reported by next, fallback warning on claims, no anonymous claims, already-holding refusal [p1/s] (tags: protocol, ownership)
+- 2026-09-02T11:55:01Z [claude-2026-09-01-b] claim: claimed

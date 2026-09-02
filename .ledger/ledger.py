@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.4.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 14
+PROTOCOL_VERSION = 15
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -157,7 +157,10 @@ directly with your file tools. Always pass `--json` and parse
 
 ## Session start — always
 
-1. Export a session id once: `LEDGER_SESSION=<agent>-<YYYY-MM-DD>-<letter>`.
+1. Set `LEDGER_SESSION=<agent>-<YYYY-MM-DD>-<letter>` in EVERY shell call
+   (an export does not survive between tool calls) or pass `--session`;
+   `next --json` reports the actor it resolved. A `why` row claimed by an
+   earlier session of yours is abandoned work: `ledger claim <id> --force`.
 2. `ledger next --claim --json` — this is your task (a bounded digest:
    open steps, HUMAN questions, dead ends, recent Log; `--full` for
    everything). Read its file (Spec, Next Steps, Open Questions) BEFORE
@@ -196,9 +199,9 @@ directly with your file tools. Always pass `--json` and parse
   intent — that is not scope expansion.
 - Check finished steps (`ledger step <id> check <n>`), add discovered ones
   (`step <id> add "..."`); the file is your memory, not the conversation.
-- Inside Spec / Next Steps / Open Questions use `###` or deeper headings —
-  a `## ` line starts a new file section. Fenced ``` examples are safe.
-  Checkbox lines must be exactly `- [ ] text` / `- [x] text`.
+- In Spec / Next Steps / Open Questions use `###` headings (a `## ` line
+  starts a new section; fences are safe); checkboxes are exactly
+  `- [ ] text` / `- [x] text`.
 - EVERY commit that advances a task ends with a trailer line in its LAST
   paragraph: `Ledger-Task: <id>` (one per related task). Forgot the
   trailer? Unpushed: amend the message. Pushed: `ledger link <id> <sha>`
@@ -1015,6 +1018,7 @@ class Ctx:
     config: dict
     actor: str
     json_mode: bool
+    actor_source: str = "unknown"
 
     @property
     def tasks_dir(self) -> Path:
@@ -1104,16 +1108,20 @@ def find_ledger_dir(start: Path | None = None) -> Path | None:
     return None
 
 
-def resolve_actor(args) -> str:
+def resolve_actor(args) -> tuple[str, str]:
+    """(actor, source): flag > env > git user.name > unknown. The source is
+    reported because in agent harnesses every shell call is a fresh
+    process — a forgotten LEDGER_SESSION silently becomes the human's git
+    name, and the agent's own claims then read as someone else's."""
     if getattr(args, "session", None):
-        return sanitize_actor(args.session)
+        return sanitize_actor(args.session), "flag"
     env = os.environ.get("LEDGER_SESSION", "").strip()
     if env:
-        return sanitize_actor(env)
+        return sanitize_actor(env), "env"
     rc, out = run_git(["config", "user.name"], Path.cwd())
     if rc == 0 and out:
-        return sanitize_actor(out)
-    return "unknown"
+        return sanitize_actor(out), "git"
+    return "unknown", "unknown"
 
 
 def make_ctx(args, mutating: bool = False) -> Ctx:
@@ -1139,8 +1147,29 @@ def make_ctx(args, mutating: bool = False) -> Ctx:
                               fix_hint="fix or delete .ledger/config.json")
         config.update(loaded)
     validate_config(config)
-    return Ctx(ledger_dir=ledger_dir, config=config,
-               actor=resolve_actor(args), json_mode=getattr(args, "json", False))
+    actor, source = resolve_actor(args)
+    return Ctx(ledger_dir=ledger_dir, config=config, actor=actor,
+               json_mode=getattr(args, "json", False), actor_source=source)
+
+
+def _identity_guard(ctx: Ctx, verb: str) -> list[dict]:
+    """Claims need a real session identity: refuse `unknown`, warn on the
+    git-name fallback (an agent that forgot LEDGER_SESSION)."""
+    if ctx.actor == "unknown":
+        raise LedgerError(
+            "usage", f"{verb} needs a session identity (actor resolved to "
+            "'unknown')", exit_code=3,
+            fix_hint="set LEDGER_SESSION=<agent>-<YYYY-MM-DD>-<letter> in "
+                     "this shell call, or pass --session")
+    if ctx.actor_source == "git":
+        return [err("session-fallback",
+                    f"no LEDGER_SESSION / --session: acting as git user "
+                    f"'{ctx.actor}'", severity="warning",
+                    fix_hint="agents must set LEDGER_SESSION in EVERY shell "
+                             "call (exports do not survive between tool "
+                             "calls) or pass --session; otherwise their own "
+                             "claims read as a human's")]
+    return []
 
 
 def validate_config(config: dict) -> None:
@@ -2130,7 +2159,8 @@ def cmd_next(args) -> int:
         data = {"task": None, "claimed": False, "why": why,
                 "blocked_on_human": human_blocked,
                 "stale_blocks": stale_blocks, "held": held,
-                "resources_held": resources_held}
+                "resources_held": resources_held,
+                "actor": {"id": ctx.actor, "source": ctx.actor_source}}
         if truncated:
             data["truncated"] = truncated
         emit(args, True, data, errors=problems,
@@ -2140,18 +2170,32 @@ def cmd_next(args) -> int:
         return 0
     top, flag = eligible[0]
     claimed = False
+    warnings: list[dict] = []
     # a takeover is a stale claim held by SOMEONE ELSE; refreshing one's own
     # stale claim is neither logged nor reported as one
     stale_holder = top.header.get("claimed_by") if flag == "stale_claim" else None
     would_take_over = bool(stale_holder) and stale_holder != ctx.actor
+    held = cap("held", held_by_me(top.id), "ledger list --mine --json")
     if args.claim:
+        warnings += _identity_guard(ctx, "next --claim")
+        # what this session already holds is checked BEFORE taking more:
+        # resume it, release it, or say --force (multi-claim sessions)
+        fresh = [h for h in held_by_me(top.id)
+                 if h["status"] == "in_progress" and not h["stale"]]
+        if fresh and not getattr(args, "force", False):
+            raise LedgerError(
+                "already-holding",
+                f"{ctx.actor} already holds {', '.join(h['id'] for h in fresh)}"
+                " — resume or release before taking more", task=fresh[0]["id"],
+                fix_hint=f"ledger brief {fresh[0]['id']} --json to resume, "
+                         f"ledger release {fresh[0]['id']} --note \"...\" to "
+                         "hand it back, or next --claim --force to hold both")
         apply_claim(top, ctx.actor, stale_holder if would_take_over else None)
         save_task(top)
         claimed = True
         # report the leases AFTER the claim, including the ones just taken
         resources_held = {r: t.id for r, t in
                           held_resources(pool, stale_days).items()}
-    held = cap("held", held_by_me(top.id), "ledger list --mine --json")
     # the digest is the DEFAULT here: this is the one command every session
     # runs, and the protocol already requires reading the task file, so the
     # full Log would enter context twice. --full restores task_full; the
@@ -2167,13 +2211,14 @@ def cmd_next(args) -> int:
             "stale_takeover": would_take_over,
             "why": why, "blocked_on_human": human_blocked,
             "stale_blocks": stale_blocks, "held": held,
-            "resources_held": resources_held}
+            "resources_held": resources_held,
+            "actor": {"id": ctx.actor, "source": ctx.actor_source}}
     if truncated:
         data["truncated"] = truncated
     if args.n > 1:
         data["tasks"] = [task_brief(t) for t, _ in eligible[:args.n]]
     verb = "claimed" if claimed else "next"
-    emit(args, True, data, errors=problems,
+    emit(args, True, data, errors=warnings + problems,
          human=[f"{verb}: {top.id} [{top.priority}/{top.size}] {top.title}"]
                + ([f"  (took over stale claim)"] if flag == "stale_claim" else [])
                + [f"  {top.path}"]
@@ -2214,12 +2259,14 @@ def cmd_claim(args) -> int:
         # stale (or forced) claim: refresh/takeover through apply_claim so
         # claimed_at advances and the Log records it
         takeover = holder if holder != ctx.actor else None
+    warnings = _identity_guard(ctx, "claim")
     all_tasks, _ = load_all_tasks(ctx)
     extra = _resource_guard(task, all_tasks, stale_days, args.force, "claim")
     apply_claim(task, ctx.actor, takeover, extra)
     save_task(task)
-    emit(args, True, {"id": task.id, "claimed_by": ctx.actor},
-         human=[f"claimed {task.id}: {task.title}" + extra])
+    emit(args, True, {"id": task.id, "claimed_by": ctx.actor,
+                      "actor": {"id": ctx.actor, "source": ctx.actor_source}},
+         errors=warnings, human=[f"claimed {task.id}: {task.title}" + extra])
     return 0
 
 
@@ -4653,6 +4700,9 @@ def build_parser() -> Parser:
     p.add_argument("--full", action="store_true",
                    help="return data.task in show's full shape instead of "
                         "the bounded digest")
+    p.add_argument("--force", action="store_true",
+                   help="with --claim: take a task although this session "
+                        "already holds a fresh claim")
     p.set_defaults(fn=cmd_next)
 
     p = sub.add_parser("claim", parents=[common], help="claim a task")

@@ -781,7 +781,8 @@ def test_list_mine_and_next_held(repo):
                        text=True)
     assert r.returncode == 3  # no identity: refuse rather than list nothing
     # next: held on the eligible path, excluding the task just claimed
-    n = repo.j("next", "--claim", "--session", "a")["data"]
+    # (--force: a multi-claim session holding fresh claims must say so)
+    n = repo.j("next", "--claim", "--session", "a", "--force")["data"]
     assert n["task"]["header"]["id"] == free
     held = {h["id"]: h for h in n["held"]}
     assert set(held) == {a, b, c}
@@ -1141,3 +1142,56 @@ def test_next_claim_reports_post_claim_resources_and_true_takeovers(repo):
     d = repo.j("next", "--claim", "--session", "b")["data"]
     assert d["stale_takeover"] is True
     assert d["task"]["header"]["claimed_by"] == "b"
+
+
+
+# --- session identity (sweep 2026-09-02, task G) ----------------------------
+
+def test_next_reports_actor_and_refuses_a_second_fresh_claim(repo):
+    a = repo.add_task("First", "-p", "p1")
+    b = repo.add_task("Second", "-p", "p2")
+    d = repo.j("next", "--claim", "--session", "w")["data"]
+    assert d["actor"] == {"id": "w", "source": "flag"}
+    assert d["task"]["header"]["id"] == a and d["held"] == []
+    refused = repo.j("next", "--claim", "--session", "w", expect=2)
+    assert refused["errors"][0]["code"] == "already-holding"
+    assert a in refused["errors"][0]["message"]
+    assert f"ledger brief {a}" in refused["errors"][0]["fix_hint"]
+    assert repo.j("show", b)["data"]["header"]["status"] == "todo"
+    d = repo.j("next", "--session", "w")["data"]  # without --claim: fine
+    assert d["task"]["header"]["id"] == b and [h["id"] for h in d["held"]] == [a]
+    d = repo.j("next", "--claim", "--session", "w", "--force")["data"]
+    assert d["claimed"] and [h["id"] for h in d["held"]] == [a]
+    # env source
+    import subprocess as _sp
+    import sys as _sys
+    r = _sp.run([_sys.executable, str(repo.script), "next", "--json"],
+                cwd=str(repo.root), env=repo.env, capture_output=True,
+                text=True)
+    assert json.loads(r.stdout)["data"]["actor"]["source"] == "env"
+
+
+def test_git_name_fallback_warns_and_unknown_identity_is_refused(repo):
+    import subprocess as _sp
+    import sys as _sys
+    tid = repo.add_task("Identity")
+    env = dict(repo.env)
+    env.pop("LEDGER_SESSION")
+    r = _sp.run([_sys.executable, str(repo.script), "claim", tid, "--json"],
+                cwd=str(repo.root), env=env, capture_output=True, text=True)
+    d = json.loads(r.stdout)
+    assert d["ok"] and d["data"]["actor"] == {"id": "tester", "source": "git"}
+    fb = [e for e in d["errors"] if e["code"] == "session-fallback"]
+    assert fb and "EVERY shell call" in fb[0]["fix_hint"]
+    repo.j("release", tid, "--session", "tester")
+    env["GIT_CONFIG_GLOBAL"] = str(repo.root / "no-such-gitconfig")
+    r = _sp.run([_sys.executable, str(repo.script), "claim", tid, "--json"],
+                cwd=str(repo.root), env=env, capture_output=True, text=True)
+    d = json.loads(r.stdout)
+    assert r.returncode == 3 and d["errors"][0]["code"] == "usage"
+    assert "unknown" in d["errors"][0]["message"]
+    assert repo.j("show", tid)["data"]["header"]["status"] == "todo"
+    r = _sp.run([_sys.executable, str(repo.script), "next", "--claim",
+                 "--json"], cwd=str(repo.root), env=env, capture_output=True,
+                text=True)
+    assert r.returncode == 3

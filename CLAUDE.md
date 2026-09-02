@@ -11,7 +11,10 @@ directly with your file tools. Always pass `--json` and parse
 
 ## Session start — always
 
-1. Export a session id once: `LEDGER_SESSION=<agent>-<YYYY-MM-DD>-<letter>`.
+1. Set `LEDGER_SESSION=<agent>-<YYYY-MM-DD>-<letter>` in EVERY shell call
+   (an export does not survive between tool calls) or pass `--session`;
+   `next --json` reports the actor it resolved. A `why` row claimed by an
+   earlier session of yours is abandoned work: `ledger claim <id> --force`.
 2. `ledger next --claim --json` — this is your task (a bounded digest:
    open steps, HUMAN questions, dead ends, recent Log; `--full` for
    everything). Read its file (Spec, Next Steps, Open Questions) BEFORE
@@ -50,9 +53,9 @@ directly with your file tools. Always pass `--json` and parse
   intent — that is not scope expansion.
 - Check finished steps (`ledger step <id> check <n>`), add discovered ones
   (`step <id> add "..."`); the file is your memory, not the conversation.
-- Inside Spec / Next Steps / Open Questions use `###` or deeper headings —
-  a `## ` line starts a new file section. Fenced ``` examples are safe.
-  Checkbox lines must be exactly `- [ ] text` / `- [x] text`.
+- In Spec / Next Steps / Open Questions use `###` headings (a `## ` line
+  starts a new section; fences are safe); checkboxes are exactly
+  `- [ ] text` / `- [x] text`.
 - EVERY commit that advances a task ends with a trailer line in its LAST
   paragraph: `Ledger-Task: <id>` (one per related task). Forgot the
   trailer? Unpushed: amend the message. Pushed: `ledger link <id> <sha>`
