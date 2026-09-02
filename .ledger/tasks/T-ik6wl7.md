@@ -1,12 +1,11 @@
 ---
 id: T-ik6wl7
 title: Decide: first-class ready status and stranded-handoff aging
-status: in_progress
+status: done
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T02:52:02Z
+closed: 2026-09-02T02:59:05Z
 tags: lifecycle, decision
 ---
 
@@ -41,6 +40,8 @@ T-fkywmw (claim nonce — different mechanism, same defer-until-observed stance)
 
 ## Commits
 
+- 14b3231 2026-09-01 Age stranded handoffs (stale-block) and claim-retaining blocked tasks
+
 ## Log
 
 - 2026-09-01T23:48:40Z [claude-2026-09-01-a] add: created: Decide: first-class ready status and stranded-handoff aging
@@ -59,3 +60,5 @@ T-fkywmw (claim nonce — different mechanism, same defer-until-observed stance)
 - 2026-09-02T02:58:45Z [claude-2026-09-01-b] step: checked 'If a ready status is approved: implement per the verified design below and note T-2e587s about SCHEMA_VERSION 2'
 - 2026-09-02T02:58:45Z [claude-2026-09-01-b] step: checked 'If stranded-handoff aging is approved: add the stale-block warning + lockstep fixture'
 - 2026-09-02T02:58:45Z [claude-2026-09-01-b] note: Step 2 (ready status) resolved as NOT approved — decision recorded in the answered question and DESIGN decision #6; the verified enum design stays in this Spec should a later wave show the convention insufficient
+- 2026-09-02T02:59:05Z [claude-2026-09-01-b] link: 14b3231 Age stranded handoffs (stale-block) and claim-retaining blocked tasks
+- 2026-09-02T02:59:05Z [claude-2026-09-01-b] done: evidence: 14b3231
