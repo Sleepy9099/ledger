@@ -106,6 +106,7 @@ answers apply <file|->               record answers in batch: feed back the
                                      `answer` on each row (all-or-nothing,
                                      re-runnable; rows without answers skip)
 claim / release --note "handoff"     session start / session end
+list --resource <slug>               tasks declaring a resource lease
 list --mine                          everything this session holds (the
                                      session-end release list; next --json
                                      also carries it as `held`)
@@ -130,6 +131,17 @@ error carries a machine-actionable `fix_hint`. Exit codes: 0 ok,
 
 Agent identity comes from `--session`, else the `LEDGER_SESSION` env var,
 else `git config user.name` — set the env once per session.
+
+## Resource leases (advisory)
+
+Tag a task `resource:<slug>` (`add ... --tag resource:gpu`, or
+`set <id> --add-tag resource:full-suite`) and a fresh in_progress claim on
+it leases that resource: `next` skips other tasks declaring the same slug
+(the `why` names the holder; `resources_held` maps every lease), `claim` /
+`unblock` refuse with `resource-held` unless `--force`, and `validate`
+reports a double-hold as `resource-contention` (info only — never fails
+CI). `list --resource gpu` lists the declarers. Derived from claim fields;
+nothing new is stored, and a blocked or stale holder does not hold.
 
 ## Exemptions are policy, not convention
 

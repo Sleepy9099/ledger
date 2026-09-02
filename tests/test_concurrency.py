@@ -100,3 +100,32 @@ def test_lock_file_never_tracked(repo):
     assert ".ledger/.lock" in gi
     status = repo.git("status", "--porcelain").stdout
     assert ".lock" not in status
+
+
+
+def test_parallel_claims_on_one_resource_produce_one_holder(plain):
+    """Two todo tasks lease the same resource: 12 racing `next --claim`
+    calls end with exactly ONE claim, the rest told why (T-6kyk2x)."""
+    a = plain.add_task("Suite run A", "--tag", "resource:full-suite")
+    b = plain.add_task("Suite run B", "--tag", "resource:full-suite")
+    procs = [subprocess.Popen(
+        [sys.executable, str(plain.script), "next", "--claim", "--json",
+         "--session", f"racer-{i}"],
+        cwd=str(plain.root), env=plain.env,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        for i in range(12)]
+    payloads = []
+    for p in procs:
+        out, err = p.communicate(timeout=180)
+        assert p.returncode == 0, err
+        payloads.append(json.loads(out))
+    winners = [p for p in payloads if p["data"]["claimed"]]
+    assert len(winners) == 1
+    won = winners[0]["data"]["task"]["header"]["id"]
+    other = b if won == a else a
+    for p in payloads:
+        if not p["data"]["claimed"]:
+            assert p["data"]["task"] is None
+            why = {w["id"]: w["ineligible_because"] for w in p["data"]["why"]}
+            assert why[other].startswith("resource full-suite held by " + won)
+            assert p["data"]["resources_held"] == {"full-suite": won}

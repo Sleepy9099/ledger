@@ -46,7 +46,8 @@ def test_random_cli_sequences_never_corrupt(plain):
 
     def op_claim_release():
         tid = any_id()
-        plain.run("claim", tid)
+        extra = ["--force"] if rng.random() < 0.3 else []
+        plain.run("claim", tid, *extra)  # resource-held may refuse: fine
         if rng.random() < 0.5:
             plain.run("release", tid, "--note", "handing off")
 

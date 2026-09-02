@@ -140,6 +140,7 @@ VALIDATION_CODES = {
     "linked-never-claimed": "warning",  # git
     "log-tamper": "warning",        # git, --coverage only
     "exempt-ratio": "info",         # git, --coverage only; never promoted
+    "resource-contention": "info",  # two fresh claims lease one resource; never promoted
 }
 
 PROTOCOL_TEXT = """# Ledger protocol (required workflow for agents)
@@ -354,6 +355,14 @@ class Task:
     @property
     def tags(self) -> list[str]:
         return self.list_field("tags")
+
+    @property
+    def resources(self) -> list[str]:
+        """`resource:<slug>` tags: the resources a fresh claim on this task
+        leases (DESIGN §7(h)). A prefix dialect inside tags — no header
+        key, so every vendored copy validates the file unchanged."""
+        return [t[len("resource:"):] for t in self.tags
+                if t.startswith("resource:") and len(t) > len("resource:")]
 
     # -- sections -----------------------------------------------------------
     def get_section(self, name: str) -> str:
@@ -1181,6 +1190,7 @@ def task_brief(task: Task) -> dict:
         "open_questions": sum(1 for q in task.questions() if not q["answered"]),
         "commits": len(task.commits()),
         "closed_relation": task.closed_relation(),
+        "resources": task.resources,
     }
 
 
@@ -1211,6 +1221,7 @@ def task_full(ctx: Ctx, task: Task, trailer_map: dict | None = None,
         "effective_commits": effective,
         "closed_relation": task.closed_relation(),
         "dependents": dependents_of(task, all_tasks),
+        "resources": task.resources,
         "last_activity": task.last_activity(),
         "path": str(task.path) if task.path else None,
     }
@@ -1421,8 +1432,34 @@ def _dep_status_text(dep: str, by_id: dict[str, Task]) -> str:
     return f"{dep} ({task.status})"
 
 
+def held_resources(tasks: list, stale_days: int) -> dict[str, Task]:
+    """resource slug -> the task whose FRESH in_progress claim leases it.
+    A lease is a pure function of claim fields already in the file: status
+    in_progress (a blocked task may retain claimed_by but does not hold),
+    not stale (any Log activity keeps it alive), tag `resource:<slug>`.
+    First holder in sort_key order wins the map; contention is reported
+    separately by validate."""
+    held: dict[str, Task] = {}
+    for t in sorted(tasks, key=sort_key):
+        if t.status != "in_progress" or claim_is_stale(t, stale_days):
+            continue
+        for r in t.resources:
+            held.setdefault(r, t)
+    return held
+
+
+def resource_clash(task: Task, held: dict[str, Task]) -> tuple[str, Task] | None:
+    """(resource, holder) when another task's fresh claim leases one of
+    this task's resources; the task's own claim never blocks itself."""
+    for r in task.resources:
+        holder = held.get(r)
+        if holder is not None and holder.id != task.id:
+            return r, holder
+    return None
+
+
 def compute_eligible(tasks: list[Task], config: dict):
-    """Returns (eligible, why, blocked_on_human).
+    """Returns (eligible, why, blocked_on_human, stale_blocks, resources_held).
 
     eligible: [(task, flag)] sorted; flag is None or 'stale_claim'.
     why: machine-readable near-miss explanations for every open task skipped.
@@ -1430,6 +1467,7 @@ def compute_eligible(tasks: list[Task], config: dict):
     done_ids = {t.id for t in tasks if t.status == "done"}
     by_id = {t.id: t for t in tasks}
     stale_days = int(config.get("stale_claim_days", 7))
+    held = held_resources(tasks, stale_days)
     eligible, why, human, stale_blocks = [], [], [], []
     for task in sorted(tasks, key=sort_key):
         if task.status not in OPEN_STATUSES:
@@ -1471,8 +1509,17 @@ def compute_eligible(tasks: list[Task], config: dict):
             why.append({"id": task.id, "ineligible_because":
                         "size xl — split it into smaller tasks first"})
             continue
+        clash = resource_clash(task, held)
+        if clash:
+            r, holder = clash
+            why.append({"id": task.id, "ineligible_because":
+                        f"resource {r} held by {holder.id} (claimed by "
+                        f"{holder.header.get('claimed_by', '?')} at "
+                        f"{holder.header.get('claimed_at', '?')})"})
+            continue
         eligible.append((task, flag))
-    return eligible, why, human, stale_blocks
+    return (eligible, why, human, stale_blocks,
+            {r: t.id for r, t in held.items()})
 
 
 def blocked_on_closed_warnings(closed: Task, all_tasks: list) -> list[dict]:
@@ -1493,16 +1540,37 @@ def blocked_on_closed_warnings(closed: Task, all_tasks: list) -> list[dict]:
     return out
 
 
-def apply_claim(task: Task, actor: str, takeover_from: str | None) -> None:
+def apply_claim(task: Task, actor: str, takeover_from: str | None,
+                extra: str = "") -> None:
     task.header["status"] = "in_progress"
     task.header["claimed_by"] = actor
     task.header["claimed_at"] = now_ts()
     task.header.pop("blocked_on", None)
     if takeover_from:
-        task.append_log(actor, "claim",
-                        f"taking over claim from {takeover_from}")
+        text = f"taking over claim from {takeover_from}"
     else:
-        task.append_log(actor, "claim", "claimed")
+        text = "claimed"
+    task.append_log(actor, "claim", text + extra)
+
+
+def _resource_guard(task: Task, all_tasks: list, stale_days: int,
+                    force: bool, verb: str) -> str:
+    """Refuse to lease a resource another fresh claim holds unless --force;
+    returns the Log suffix to record a forced double-hold."""
+    clash = resource_clash(task, held_resources(all_tasks, stale_days))
+    if clash is None:
+        return ""
+    r, holder = clash
+    if not force:
+        raise LedgerError(
+            "resource-held",
+            f"resource {r} is held by {holder.id} (claimed by "
+            f"{holder.header.get('claimed_by', '?')} at "
+            f"{holder.header.get('claimed_at', '?')})", task=task.id,
+            fix_hint=f"wait for {holder.id} to release, pick another task, "
+                     f"or {verb} --force if you will serialize the resource "
+                     "yourself")
+    return f" (resource {r} also held by {holder.id})"
 
 
 # ---------------------------------------------------------------------------
@@ -1703,6 +1771,9 @@ def cmd_list(args) -> int:
             continue
         if args.tag and args.tag not in task.tags:
             continue
+        if getattr(args, "resource", None) and \
+                args.resource not in task.resources:
+            continue
         if depends_on and depends_on not in task.depends_on:
             continue
         if args.claimed and not task.header.get("claimed_by"):
@@ -1770,8 +1841,8 @@ def cmd_next(args) -> int:
     bad = structural_problem_stems(problems)
     pool = [t for t in tasks
             if t.id not in bad and (t.path is None or t.path.stem not in bad)]
-    eligible, why, human_blocked, stale_blocks = compute_eligible(
-        pool, ctx.config)
+    eligible, why, human_blocked, stale_blocks, resources_held = \
+        compute_eligible(pool, ctx.config)
     for stem in sorted(bad):
         why.append({"id": stem, "ineligible_because":
                     "file has structural problems — run ledger validate and "
@@ -1807,7 +1878,8 @@ def cmd_next(args) -> int:
         held = held_by_me(None)
         emit(args, True, {"task": None, "claimed": False, "why": why,
                           "blocked_on_human": human_blocked,
-                          "stale_blocks": stale_blocks, "held": held},
+                          "stale_blocks": stale_blocks, "held": held,
+                          "resources_held": resources_held},
              errors=problems,
              human=["nothing eligible"] +
                    [f"  {w['id']}: {w['ineligible_because']}" for w in why]
@@ -1838,7 +1910,8 @@ def cmd_next(args) -> int:
             "claimed": claimed,
             "stale_takeover": flag == "stale_claim",
             "why": why, "blocked_on_human": human_blocked,
-            "stale_blocks": stale_blocks, "held": held}
+            "stale_blocks": stale_blocks, "held": held,
+            "resources_held": resources_held}
     if args.n > 1:
         data["tasks"] = [task_brief(t) for t, _ in eligible[:args.n]]
     verb = "claimed" if claimed else "next"
@@ -1883,10 +1956,12 @@ def cmd_claim(args) -> int:
         # stale (or forced) claim: refresh/takeover through apply_claim so
         # claimed_at advances and the Log records it
         takeover = holder if holder != ctx.actor else None
-    apply_claim(task, ctx.actor, takeover)
+    all_tasks, _ = load_all_tasks(ctx)
+    extra = _resource_guard(task, all_tasks, stale_days, args.force, "claim")
+    apply_claim(task, ctx.actor, takeover, extra)
     save_task(task)
     emit(args, True, {"id": task.id, "claimed_by": ctx.actor},
-         human=[f"claimed {task.id}: {task.title}"])
+         human=[f"claimed {task.id}: {task.title}" + extra])
     return 0
 
 
@@ -2405,12 +2480,19 @@ def cmd_unblock(args) -> int:
     if task.status != "blocked":
         raise LedgerError("bad-state", f"{task.id} is not blocked",
                           task=task.id)
+    extra = ""
+    if task.header.get("claimed_by"):
+        # restoring in_progress re-acquires the task's resource leases
+        all_tasks, _ = load_all_tasks(ctx)
+        stale_days = int(ctx.config.get("stale_claim_days", 7))
+        extra = _resource_guard(task, all_tasks, stale_days,
+                                getattr(args, "force", False), "unblock")
     task.header.pop("blocked_on", None)
     if task.header.get("claimed_by"):
         task.header["status"] = "in_progress"
     else:
         task.header["status"] = "todo"
-    task.append_log(ctx.actor, "unblock", f"-> {task.header['status']}")
+    task.append_log(ctx.actor, "unblock", f"-> {task.header['status']}" + extra)
     save_task(task)
     emit(args, True, {"id": task.id, "status": task.status},
          human=[f"unblocked {task.id} -> {task.status}"])
@@ -3009,6 +3091,29 @@ def validate_offline(ctx: Ctx) -> list[dict]:
                         task=tid, severity="warning",
                         fix_hint="use exactly '- [ ] text' / '- [x] text' "
                                  "(single spaces, lowercase x)"))
+
+    # resource-contention (info, never promoted): two FRESH in_progress
+    # claims lease the same resource — reachable via claim/unblock --force,
+    # a cross-branch merge, a hand edit, or an older copy without the gate.
+    # A header-derived hygiene signal in the stale-claim family, not an
+    # enforced guarantee: the tool cannot verify a resource is in use.
+    holders: dict[str, list[Task]] = {}
+    for task in tasks:
+        if task.status == "in_progress" and not claim_is_stale(task, stale_days):
+            for r in task.resources:
+                holders.setdefault(r, []).append(task)
+    for r, ts in sorted(holders.items()):
+        if len(ts) > 1:
+            names = ", ".join(
+                f"{t.id} ({t.header.get('claimed_by', '?')})"
+                for t in sorted(ts, key=sort_key))
+            violations.append(err(
+                "resource-contention",
+                f"resource {r} is leased by {len(ts)} fresh claims: {names}",
+                severity="info",
+                fix_hint="serialize the work: release one holder, or "
+                         "release --blocked --on 'external: waiting for "
+                         f"resource {r}'"))
     return violations
 
 
@@ -3565,6 +3670,8 @@ def build_parser() -> Parser:
     p.add_argument("--status", action="append", choices=STATUSES)
     p.add_argument("--priority", action="append", choices=PRIORITIES)
     p.add_argument("--tag")
+    p.add_argument("--resource", metavar="SLUG",
+                   help="sugar for --tag resource:<slug> (ANDed with --tag)")
     p.add_argument("--depends-on", metavar="ID",
                    help="only tasks whose depends_on names this task "
                         "(reverse lookup: which wave was T-x in?)")
@@ -3687,6 +3794,9 @@ def build_parser() -> Parser:
 
     p = sub.add_parser("unblock", parents=[common], help="clear a block")
     p.add_argument("id")
+    p.add_argument("--force", action="store_true",
+                   help="restore the claim even if its resource is now held "
+                        "by another fresh claim")
     p.set_defaults(fn=cmd_unblock)
 
     p = sub.add_parser("link", parents=[common],

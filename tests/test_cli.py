@@ -752,3 +752,82 @@ def test_list_mine_and_next_held(repo):
         assert claims[-1]["text"] == "claimed"
         assert "taking over" not in claims[-1]["text"]
     assert any(h["stale"] for h in n["held"])
+
+
+
+# --- advisory resource leases (T-6kyk2x) -------------------------------------
+
+def test_next_skips_held_resources_and_falls_through(repo):
+    from test_hardening import set_stale_days
+    holder = repo.add_task("Uses the GPU", "-p", "p1", "--tag", "resource:gpu")
+    waiter = repo.add_task("Also needs the GPU", "-p", "p1", "--tag",
+                           "resource:gpu", "--tag", "resource:db")
+    free = repo.add_task("No resources", "-p", "p2")
+    repo.j("claim", holder, "--session", "a")
+    n = repo.j("next", "-n", "5", "--session", "b")["data"]
+    assert n["task"]["header"]["id"] == free  # fell through to the free task
+    why = {w["id"]: w["ineligible_because"] for w in n["why"]}
+    assert why[waiter].startswith(f"resource gpu held by {holder}")
+    assert "claimed by a" in why[waiter]
+    assert n["resources_held"] == {"gpu": holder}
+    assert [t["id"] for t in n["tasks"]] == [free]
+    assert repo.j("show", waiter)["data"]["resources"] == ["gpu", "db"]
+    assert repo.j("list", "--resource", "gpu")["data"]["tasks"] == \
+        repo.j("list", "--tag", "resource:gpu")["data"]["tasks"]
+    assert repo.j("list", "--resource", "gpu")["data"]["tasks"][0][
+        "resources"] == ["gpu"]
+    d = repo.j("next", "--claim", "--session", "b")["data"]
+    assert d["claimed"] and d["task"]["header"]["id"] == free
+    # a blocked holder does not hold; neither does a stale one
+    repo.j("block", holder, "--on", "human", "--session", "a")
+    assert repo.j("next", "--session", "c")["data"]["task"]["header"][
+        "id"] == waiter
+    repo.j("unblock", holder, "--session", "a")
+    assert repo.j("next", "--session", "c")["data"]["task"] is None
+    set_stale_days(repo, -1)
+    n = repo.j("next", "--session", "c")["data"]
+    assert n["resources_held"] == {}
+    set_stale_days(repo, 7)
+    # release / done / drop of the holder frees the resource
+    repo.j("release", holder, "--session", "a")
+    n = repo.j("next", "--session", "c")["data"]
+    assert n["task"]["header"]["id"] in (holder, waiter)
+    assert n["resources_held"] == {}
+    # nothing-eligible path carries resources_held too
+    repo.j("claim", waiter, "--session", "a")
+    repo.j("claim", holder, "--session", "a", "--force")
+    repo.j("done", free, "--no-code", "x", "--session", "b")
+    n = repo.j("next", "--session", "c")["data"]
+    assert n["task"] is None and set(n["resources_held"]) == {"gpu", "db"}
+
+
+def test_claim_and_unblock_refuse_held_resources_unless_forced(repo):
+    a = repo.add_task("First on the suite", "--tag", "resource:full-suite")
+    b = repo.add_task("Second on the suite", "--tag", "resource:full-suite")
+    repo.j("claim", a, "--session", "x")
+    refused = repo.j("claim", b, "--session", "y", expect=2)
+    assert refused["errors"][0]["code"] == "resource-held"
+    assert a in refused["errors"][0]["message"]
+    assert "--force" in refused["errors"][0]["fix_hint"]
+    assert repo.j("show", b)["data"]["header"]["status"] == "todo"
+    # self re-claim of one's own holder is never refused
+    assert repo.j("claim", a, "--session", "x")["ok"]
+    forced = repo.j("claim", b, "--session", "y", "--force")
+    assert forced["ok"]
+    log = repo.j("show", b)["data"]["log"]
+    assert log[-1]["text"] == f"claimed (resource full-suite also held by {a})"
+    v = repo.j("validate", "--no-git", "--strict")  # info never fails CI
+    assert v["ok"]
+    cont = [e for e in v["errors"] if e["code"] == "resource-contention"]
+    assert len(cont) == 1 and cont[0]["severity"] == "info"
+    assert a in cont[0]["message"] and b in cont[0]["message"]
+    # unblock re-acquires the lease: refused while held elsewhere
+    repo.j("release", b, "--session", "y")
+    repo.j("block", a, "--on", "human", "--session", "x")  # a keeps its claim
+    repo.j("claim", b, "--session", "y")  # free now: a is blocked
+    refused = repo.j("unblock", a, "--session", "x", expect=2)
+    assert refused["errors"][0]["code"] == "resource-held"
+    assert repo.j("show", a)["data"]["header"]["status"] == "blocked"
+    ok = repo.j("unblock", a, "--session", "x", "--force")
+    assert ok["ok"] and ok["data"]["status"] == "in_progress"
+    assert "also held by" in repo.j("show", a)["data"]["log"][-1]["text"]

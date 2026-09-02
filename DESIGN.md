@@ -94,7 +94,7 @@ order so diffs stay minimal. Unknown header keys are a validate *warning*
 | `claimed_at` | iff claimed_by | UTC ISO-8601 Z |
 | `blocked_on` | iff blocked | `human` \| a task id \| `external: <note>` |
 | `depends_on` | optional | comma-separated task ids (AND semantics, acyclic) |
-| `tags` | optional | comma-separated slugs |
+| `tags` | optional | comma-separated slugs; `resource:<slug>` tags declare a resource lease (§7(h)) — a prefix dialect inside tags rather than a header key, so every vendored copy validates the file unchanged |
 
 There is **no `updated` field** — it would conflict on every concurrent edit.
 "Last activity" = max(created, claimed_at, newest Log timestamp), computed.
@@ -251,7 +251,9 @@ Notable semantics:
   in). Host scripts that read `data.task.log` / `.spec` from `next` use
   `--full`.
 - `next` eligibility: `todo` (plus `in_progress` with a stale claim, flagged
-  as a takeover), all `depends_on` done, not blocked, size ≠ xl. Sort:
+  as a takeover), all `depends_on` done, not blocked, size ≠ xl, no
+  `resource:` tag leased by another task's fresh claim (§7(h); the why
+  names the holder and `resources_held` maps every leased resource). Sort:
   priority, created, id. `why` always explains every near-miss
   machine-readably (not only when nothing is eligible), `blocked_on_human`
   lists operator gates, and `stale_blocks` lists tasks blocked on a task
@@ -415,6 +417,27 @@ reduces to git's per-line merge on one small Markdown file.
   overrides) with a `lock-timeout` refusal, exit 2. Read-only commands stay
   lock-free. The lock file is gitignored by `init` and the OS releases the
   lock even on a crash.
+- **(h) Advisory resource leases (2026-09-01):** a claim stops two agents
+  doing the same task, not consuming the same GPU / integration DB / full
+  suite. A task declares resources as `resource:<slug>` tags; a lease is a
+  pure function of claim fields already in the file — `held(r)` = tasks
+  with status in_progress (a blocked task may retain claimed_by but does
+  not hold), a fresh claim (any Log activity keeps it alive; a stranded
+  holder blocks the resource for up to `stale_claim_days`, which the
+  orchestrator sweeps with `release --force` / `claim --force`), and `r`
+  among its resources. `next` skips a task whose resource another task
+  holds (`why: resource <r> held by <T-x> ...`) and falls through to the
+  best free task — that is the whole of resource-aware admission; `claim`
+  and `unblock` (which restores a retained claim) refuse with
+  `resource-held` unless `--force`, and a forced double-hold is journaled on
+  the claim line. `validate` reports `resource-contention` at info tier
+  (never promoted: a sanctioned `--force` must not fail strict CI). No
+  registry, counter, sidecar, wait loop, daemon, capacity > 1, cross-branch
+  enforcement or `max_active_workers` knob (admission belongs in the
+  spawner, which reads `list --claimed --json`); a cross-branch double-hold
+  merges cleanly and surfaces post-merge — detected, not prevented (f).
+  Not in PROTOCOL_TEXT (review §22): the `why` line teaches the agent at the
+  moment it matters.
 - **Post-merge ritual:** `ledger validate --coverage` + `ledger scan --write`
   (`--coverage` is what runs the Log tamper checks).
 

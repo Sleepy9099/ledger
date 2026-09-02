@@ -187,9 +187,10 @@ def test_validation_code_table_is_stable(ledger_mod):
         "exempt-policy", "stale-claim", "stale-block",
         "xl-open", "checkbox-grammar", "done-loose-ends", "unknown-key",
         "sha-unreachable", "linked-never-claimed", "log-tamper",
-        "exempt-ratio",
+        "exempt-ratio", "resource-contention",
     }
     assert ledger_mod.VALIDATION_CODES["exempt-ratio"] == "info"
+    assert ledger_mod.VALIDATION_CODES["resource-contention"] == "info"
 
 
 
