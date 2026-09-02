@@ -1,12 +1,11 @@
 ---
 id: T-v2elrs
 title: Robustness bundle: init config envelope, internal-error envelope, --prefix validation, iterative cycle check, unknown-section warning, honest ok on read commands
-status: in_progress
+status: done
 priority: p2
 size: s
 created: 2026-09-02T11:44:57Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T12:02:19Z
+closed: 2026-09-02T12:06:46Z
 tags: hygiene
 ---
 
@@ -27,7 +26,11 @@ tags: hygiene
 
 ## Commits
 
+- b6347e7 2026-09-02 Robustness bundle: init config envelope, internal-error envelope, prefix validation, iterative cycle check, unknown-section warning, honest ok
+
 ## Log
 
 - 2026-09-02T11:44:57Z [claude-2026-09-01-b] add: created: Robustness bundle: init config envelope, internal-error envelope, --prefix validation, iterative cycle check, unknown-section warning, honest ok on read commands [p2/s] (tags: hygiene)
 - 2026-09-02T12:02:19Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T12:06:46Z [claude-2026-09-01-b] link: b6347e7 Robustness bundle: init config envelope, internal-error envelope, prefix validation, iterative cycle check, unknown-section warning, honest ok
+- 2026-09-02T12:06:46Z [claude-2026-09-01-b] done: evidence: b6347e7
