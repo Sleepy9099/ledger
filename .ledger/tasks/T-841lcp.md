@@ -1,12 +1,11 @@
 ---
 id: T-841lcp
 title: Hard context budgets: bound every digest family and next's why with truncation metadata
-status: in_progress
+status: done
 priority: p1
 size: s
 created: 2026-09-02T04:51:26Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T04:56:44Z
+closed: 2026-09-02T05:00:51Z
 tags: context, ergonomics
 ---
 
@@ -30,7 +29,11 @@ task_digest caps only recent_log; steps_open, human_gated_questions, dead_ends, 
 
 ## Commits
 
+- 30866cc 2026-09-02 Hard context budgets: bound every digest family and next's lists
+
 ## Log
 
 - 2026-09-02T04:51:26Z [claude-2026-09-01-b] add: created: Hard context budgets: bound every digest family and next's why with truncation metadata [p1/s] (tags: context, ergonomics)
 - 2026-09-02T04:56:44Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T05:00:51Z [claude-2026-09-01-b] link: 30866cc Hard context budgets: bound every digest family and next's lists
+- 2026-09-02T05:00:51Z [claude-2026-09-01-b] done: evidence: 30866cc
