@@ -92,7 +92,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # storage-schema version the repo was bootstrapped at (written once by init,
 # never by a task-mutating command — config.json must not become a merge hot
 # spot).
-TOOL_VERSION = "1.4.0"
+TOOL_VERSION = "1.5.0"
 SCHEMA_VERSION = 1
 PROTOCOL_VERSION = 17
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"

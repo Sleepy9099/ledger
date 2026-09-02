@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ledger-agent-tasks"
-version = "1.4.0"
+version = "1.5.0"
 description = "A task/spec ledger for AI coding agents on long-running projects: one stdlib-only Python file, one directory of Markdown task files, one validator."
 readme = "README.md"
 requires-python = ">=3.10"
