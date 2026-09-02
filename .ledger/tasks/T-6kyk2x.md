@@ -1,12 +1,11 @@
 ---
 id: T-6kyk2x
 title: Advisory resource leases derived from claims (measure first)
-status: in_progress
+status: done
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T02:59:08Z
+closed: 2026-09-02T03:07:31Z
 tags: concurrency, orchestration
 ---
 
@@ -60,6 +59,8 @@ tests/test_cli.py: `next` skips a resource-held task and its `why` names the hol
 
 ## Commits
 
+- a7ed594 2026-09-01 Advisory resource leases derived from claims (resource:<slug> tags)
+
 ## Log
 
 - 2026-09-01T23:48:40Z [claude-2026-09-01-a] add: created: Advisory resource leases derived from claims (measure first)
@@ -74,3 +75,5 @@ tests/test_cli.py: `next` skips a resource-held task and its `why` names the hol
 - 2026-09-02T03:07:16Z [claude-2026-09-01-b] step: checked 'Human answers representation / timing / warning-tier; unblock only when the measurement gate is met'
 - 2026-09-02T03:07:16Z [claude-2026-09-01-b] step: checked 'Phase 1: Task.resources, next gate + resources_held, claim/unblock resource-held refusal with --force, resource-contention validate code, list --resource'
 - 2026-09-02T03:07:16Z [claude-2026-09-01-b] step: checked 'DESIGN §2 tags row, §5 eligibility, §7(h); README; tests incl. the concurrency race'
+- 2026-09-02T03:07:31Z [claude-2026-09-01-b] link: a7ed594 Advisory resource leases derived from claims (resource:<slug> tags)
+- 2026-09-02T03:07:31Z [claude-2026-09-01-b] done: evidence: a7ed594
