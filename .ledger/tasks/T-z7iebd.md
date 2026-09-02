@@ -1,12 +1,11 @@
 ---
 id: T-z7iebd
 title: ledger brief: bounded derived view of one task
-status: in_progress
+status: done
 priority: p2
 size: s
 created: 2026-09-01T23:48:39Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T01:54:41Z
+closed: 2026-09-02T02:02:51Z
 tags: ergonomics, context
 ---
 
@@ -58,6 +57,8 @@ Task files untouched; a pre-brief vendored copy gives argparse exit 3 (T-2e587s 
 
 ## Commits
 
+- 458d326 2026-09-01 Add ledger brief: a bounded derived view of one task
+
 ## Log
 
 - 2026-09-01T23:48:39Z [claude-2026-09-01-a] add: created: ledger brief: bounded derived view of one task
@@ -71,3 +72,5 @@ Task files untouched; a pre-brief vendored copy gives argparse exit 3 (T-2e587s 
 - 2026-09-02T01:56:58Z [claude-2026-09-01-b] step: checked '--brief on show and next (replaces the task_full shape; -n rows unchanged)'
 - 2026-09-02T01:56:58Z [claude-2026-09-01-b] step: checked 'Replace the PROTOCOL_TEXT step-2 clause; re-run init; README; DESIGN §5'
 - 2026-09-02T01:56:59Z [claude-2026-09-01-b] step: checked 'Tests incl. envelope + lock-free lists, plain fixture, trailer-only effective_commits'
+- 2026-09-02T02:02:51Z [claude-2026-09-01-b] link: 458d326 Add ledger brief: a bounded derived view of one task
+- 2026-09-02T02:02:51Z [claude-2026-09-01-b] done: evidence: 458d326
