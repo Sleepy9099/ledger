@@ -79,8 +79,25 @@ GITIGNORE_LINE = ".ledger/.lock"
 CLAUDE_BEGIN = "<!-- LEDGER:BEGIN -->"
 CLAUDE_END = "<!-- LEDGER:END -->"
 
+# Three independent version lines (see DESIGN "Versions"):
+#   TOOL_VERSION     — this file. Bump on every behavior change that ships.
+#   SCHEMA_VERSION   — the task-file storage schema (DESIGN §2). Bump ONLY
+#                      for a change an older copy reports as an enums / parse
+#                      / state-coherence ERROR (new status, new required key,
+#                      new claim pairing); a purely additive header key does
+#                      not bump it (older copies emit only unknown-key).
+#   PROTOCOL_VERSION — PROTOCOL_TEXT. Bump whenever that literal changes.
+# `ledger doctor` reports all three offline; config.json's "version" is the
+# storage-schema version the repo was bootstrapped at (written once by init,
+# never by a task-mutating command — config.json must not become a merge hot
+# spot).
+TOOL_VERSION = "1.1.0"
+SCHEMA_VERSION = 1
+PROTOCOL_VERSION = 2
+CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
+
 DEFAULT_CONFIG = {
-    "version": 1,
+    "version": SCHEMA_VERSION,
     "prefix": "T",
     "baseline": None,
     "stale_claim_days": 7,
@@ -1971,6 +1988,16 @@ def cmd_drop(args) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _enum_hint(allowed: tuple) -> str:
+    # An old vendored copy will never have `doctor`, so the "corpus newer than
+    # tool" signal must ride on the one command every CI runs.
+    return (f"one of: {', '.join(allowed)}; if this file was written by a "
+            "newer ledger.py, update the vendored copy (python "
+            "<newer>/ledger.py init from the repo root) instead of editing "
+            "the value, and do not run mutating commands from this copy "
+            "against this corpus")
+
+
 def validate_offline(ctx: Ctx) -> list[dict]:
     violations: list[dict] = []
     id_re = ctx.id_pattern()
@@ -2053,15 +2080,15 @@ def validate_offline(ctx: Ctx) -> list[dict]:
         if status not in STATUSES:
             violations.append(err("enums", f"invalid status '{status}'",
                                   task=tid,
-                                  fix_hint=f"one of: {', '.join(STATUSES)}"))
+                                  fix_hint=_enum_hint(STATUSES)))
         if task.priority not in PRIORITIES:
             violations.append(err("enums", f"invalid priority '{task.priority}'",
                                   task=tid,
-                                  fix_hint=f"one of: {', '.join(PRIORITIES)}"))
+                                  fix_hint=_enum_hint(PRIORITIES)))
         if task.size not in SIZES:
             violations.append(err("enums", f"invalid size '{task.size}'",
                                   task=tid,
-                                  fix_hint=f"one of: {', '.join(SIZES)}"))
+                                  fix_hint=_enum_hint(SIZES)))
         for key in ("created", "closed", "claimed_at"):
             val = task.header.get(key)
             if val is not None and not TS_RE.match(val):
@@ -2443,6 +2470,124 @@ def cmd_validate(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# doctor: offline version / compatibility report
+# ---------------------------------------------------------------------------
+
+VENDORED_VERSION_RE = re.compile(r'^TOOL_VERSION = "([^"]+)"', re.M)
+
+
+def _read_text_if_exists(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def cmd_doctor(args) -> int:
+    """Answer "is this vendored copy stale, and does the task corpus match
+    the schema this copy expects?" from files alone — no git history, no
+    network (the only subprocess is make_ctx's actor lookup, which
+    --session / LEDGER_SESSION bypass)."""
+    ctx = make_ctx(args)
+    tasks, problems = load_all_tasks(ctx)
+    unknown_keys, unknown_statuses = [], []
+    for t in tasks:
+        label = t.id or (t.path.stem if t.path else "?")
+        for key in t.header:
+            if key not in HEADER_ORDER:
+                unknown_keys.append({"task": label, "key": key})
+        if t.status not in STATUSES:
+            unknown_statuses.append({"task": label, "status": t.status})
+    declared = ctx.config.get("version")
+    config_newer = isinstance(declared, int) and declared > SCHEMA_VERSION
+    corpus_newer = bool(unknown_keys or unknown_statuses)
+    compatible = not (config_newer or corpus_newer)
+
+    vendored_path = ctx.ledger_dir / "ledger.py"
+    vendored_text = _read_text_if_exists(vendored_path)
+    m = VENDORED_VERSION_RE.search(vendored_text or "")
+    vendored_version = m.group(1) if m else None
+    running_is_vendored = False
+    try:
+        running_is_vendored = Path(__file__).resolve() == vendored_path.resolve()
+    except OSError:
+        pass
+
+    root = ctx.ledger_dir.parent
+    protocol_md = _read_text_if_exists(ctx.ledger_dir / "PROTOCOL.md")
+    claude_md = _read_text_if_exists(root / "CLAUDE.md")
+    block = f"{CLAUDE_BEGIN}\n\n{PROTOCOL_TEXT}\n{CLAUDE_END}"
+    in_sync = {"PROTOCOL.md": protocol_md == PROTOCOL_TEXT,
+               "CLAUDE.md": claude_md is not None and block in claude_md}
+
+    errors: list[dict] = []
+    if not compatible:
+        what = []
+        if config_newer:
+            what.append(f"config.json declares schema {declared} > "
+                        f"{SCHEMA_VERSION}")
+        if unknown_statuses:
+            what.append("unknown status " + ", ".join(
+                f"'{u['status']}' ({u['task']})" for u in unknown_statuses[:3]))
+        if unknown_keys:
+            what.append("unknown header key " + ", ".join(
+                f"'{u['key']}' ({u['task']})" for u in unknown_keys[:3]))
+        errors.append(err(
+            "schema-mismatch",
+            "the task corpus looks newer than this ledger.py: "
+            + "; ".join(what),
+            fix_hint="run `python <newer>/ledger.py init` from the repo root "
+                     "(init copies itself into .ledger/ and refreshes "
+                     "PROTOCOL.md/CLAUDE.md); do not run mutating commands "
+                     "from this copy against this corpus. If a key is really "
+                     "a typo, ledger validate names it (unknown-key)"))
+    if vendored_version is not None and vendored_version != TOOL_VERSION:
+        errors.append(err(
+            "vendored-stale",
+            f"running ledger.py {TOOL_VERSION} but {vendored_path} is "
+            f"{vendored_version}", severity="warning",
+            fix_hint="run `python <this>/ledger.py init` from the repo root "
+                     "to re-vendor, or run the vendored copy"))
+    for name, ok in in_sync.items():
+        if not ok:
+            errors.append(err(
+                "protocol-stale",
+                f"{name} does not carry this copy's PROTOCOL_TEXT "
+                f"(protocol version {PROTOCOL_VERSION})", severity="warning",
+                fix_hint="run `python .ledger/ledger.py init` from the repo "
+                         "root to regenerate it"))
+    data = {
+        "tool_version": TOOL_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "protocol_version": PROTOCOL_VERSION,
+        "config_schema_version": declared,
+        "corpus_schema_version": SCHEMA_VERSION if not corpus_newer else None,
+        "repo_compatible": compatible,
+        "vendored_tool_version": vendored_version,
+        "running_is_vendored_copy": running_is_vendored,
+        "protocol_files_in_sync": in_sync,
+        "task_count": len(tasks),
+        "corpus_signals": {"unknown_keys": unknown_keys,
+                           "unknown_statuses": unknown_statuses},
+        "ledger_dir": str(ctx.ledger_dir),
+        "python": ".".join(str(x) for x in sys.version_info[:3]),
+        "canonical_source": CANONICAL_SOURCE,
+    }
+    human = [
+        f"ledger {TOOL_VERSION} (schema {SCHEMA_VERSION}, protocol "
+        f"{PROTOCOL_VERSION}) — {CANONICAL_SOURCE}",
+        f"repo: config schema {declared}, {len(tasks)} task(s), "
+        f"{'compatible' if compatible else 'NOT compatible'}",
+        f"vendored copy: {vendored_version or '(missing)'}"
+        + (" (running it)" if running_is_vendored else ""),
+        "protocol files: " + ", ".join(
+            f"{k} {'in sync' if v else 'STALE'}" for k, v in in_sync.items()),
+    ]
+    emit(args, compatible, data, errors=errors + problems, human=human)
+    return 0 if compatible else 1
+
+
+# ---------------------------------------------------------------------------
 # CLI wiring
 # ---------------------------------------------------------------------------
 
@@ -2463,6 +2608,9 @@ def build_parser() -> Parser:
 
     ap = Parser(prog="ledger", description=__doc__,
                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--version", action="version",
+                    version=f"ledger {TOOL_VERSION} (schema {SCHEMA_VERSION}, "
+                            f"protocol {PROTOCOL_VERSION})")
     sub = ap.add_subparsers(dest="cmd", required=True, parser_class=Parser)
 
     p = sub.add_parser("init", parents=[common], help="scaffold .ledger/")
@@ -2614,6 +2762,11 @@ def build_parser() -> Parser:
     p.add_argument("--no-git", action="store_true",
                    help="skip git-backed checks (exported trees)")
     p.set_defaults(fn=cmd_validate)
+
+    p = sub.add_parser("doctor", parents=[common],
+                       help="offline version/compatibility report (exit 1 "
+                            "if the corpus is newer than this copy)")
+    p.set_defaults(fn=cmd_doctor)
 
     return ap
 

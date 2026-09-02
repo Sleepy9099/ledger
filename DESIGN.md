@@ -53,7 +53,7 @@ either a per-task file or git history itself.
 
 ```json
 {
-  "version": 1,
+  "version": 1,                       // storage-SCHEMA version at bootstrap; written once by init
   "prefix": "T",
   "baseline": "<sha of HEAD at init — commits before it are exempt from coverage>",
   "stale_claim_days": 7,
@@ -176,8 +176,8 @@ Commands: `init`, `add`, `list`, `show`, `next [--claim]`, `claim [--force]`,
 `release [--blocked --on]`, `set`, `note`, `step add|check|uncheck`,
 `question add|resolve`, `questions [--human]`, `block --on` / `unblock`,
 `link`, `scan [--write]`, `done [--commit|--no-code|--force]`, `drop --why`,
-`validate [--coverage] [--strict] [--no-git]`. (Exact flags: `--help` or
-README.)
+`validate [--coverage] [--strict] [--no-git]`, `doctor`. (Exact flags:
+`--help` or README.)
 
 Notable semantics:
 
@@ -249,6 +249,35 @@ settings cannot silently blind them. Info (never promoted, `--coverage`
 only): `exempt-ratio` — escape-hatch abuse stays visible.
 
 All offline checks also run with `--no-git` for exported trees.
+
+## 6a. Versions
+
+Repos bootstrapped at different points in the tool's evolution must be able
+to tell whether their vendored copy is stale and whether their task corpus
+matches the schema that copy expects — offline, because the answer is
+needed before any command can be trusted. Three constants in `ledger.py`:
+
+- `TOOL_VERSION` — the file; bumps on every shipped behavior change.
+- `SCHEMA_VERSION` — the §2 storage schema. Bump rule: any change an OLDER
+  copy reports as an `enums` / `parse` / `state-coherence` ERROR (a new
+  status value, a new required key, a new claim pairing) bumps it; a purely
+  additive header key does not (older copies emit only the `unknown-key`
+  warning). Today 1 = the §2 header. A task that adds a status value must
+  itself add the row.
+- `PROTOCOL_VERSION` — `PROTOCOL_TEXT`; every task that edits the literal
+  bumps it and re-runs `init` so PROTOCOL.md / CLAUDE.md follow.
+
+`config.json`'s `version` is the schema at bootstrap: written once by `init`
+when it creates the file and by NOTHING else (a task-mutating command must
+never touch config.json — core bet 2, no shared mutable file), so it can lag
+both the tool and the corpus and is reported, not trusted. `doctor` infers
+`corpus_schema_version` from the task headers instead: any status outside
+the enum or any key outside the canonical header order means "corpus newer
+than tool" (`repo_compatible: false`, exit 1, `schema-mismatch` — a doctor
+code, not a validate code). Because an old copy will never have `doctor`,
+the same signal rides on `validate`'s `enums` fix_hint, the one path every CI
+runs. A copy that predates `doctor` answers argparse exit 3 with no
+envelope: "tool predates doctor" is itself the diagnosis.
 
 ## 7. Merge / concurrency story
 

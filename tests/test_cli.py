@@ -292,6 +292,7 @@ def test_every_command_emits_envelope(repo):
         ("question", tid, "add", "q?"), ("claim", tid), ("release", tid),
         ("block", tid, "--on", "human"), ("unblock", tid),
         ("set", tid, "--priority", "p1"), ("scan",), ("validate",),
+        ("doctor",),
     ]
     for call in calls:
         r = repo.run(*call, "--json")

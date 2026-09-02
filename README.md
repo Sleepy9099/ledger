@@ -88,6 +88,8 @@ done <id> [--commit HEAD]            close with evidence (refuses otherwise)
 drop <id> --why "..."                close as won't-do (files never deleted);
      [--duplicate-of|--superseded-by <id>]  names the survivor machine-visibly
 validate [--coverage] [--strict]     every invariant; exit 1 on violations
+doctor                               offline: tool/schema/protocol versions,
+                                     is the vendored copy or corpus stale?
 ```
 
 All commands accept `--json` and print `{"ok", "data", "errors"}`; every
@@ -96,6 +98,25 @@ error carries a machine-actionable `fix_hint`. Exit codes: 0 ok,
 
 Agent identity comes from `--session`, else the `LEDGER_SESSION` env var,
 else `git config user.name` — set the env once per session.
+
+## Versions
+
+`ledger.py` carries three independent version lines, all printed by
+`ledger doctor --json` (and `ledger --version`): **tool** (this file),
+**schema** (the task-file storage format — bumped only for changes an older
+copy would report as an `enums`/`parse`/`state-coherence` error) and
+**protocol** (the `PROTOCOL_TEXT` block `init` mirrors into PROTOCOL.md and
+CLAUDE.md). `config.json`'s `version` is the schema the repo was
+bootstrapped at; it is written once by `init` and by nothing else.
+
+`doctor` is fully offline: it infers the corpus schema from the task headers
+themselves (an unknown status or header key means "written by a newer
+ledger.py" — exit 1, `schema-mismatch`, fix: `python <newer>/ledger.py init`),
+compares the vendored copy's version with the running one, and checks that
+PROTOCOL.md / the CLAUDE.md block match this copy's protocol text
+(`protocol-stale` warning, fix: re-run `init`). A copy that predates `doctor`
+answers with argparse exit 3 and no JSON envelope — treat that as "tool
+predates doctor: re-vendor".
 
 ## Merge rules (also in PROTOCOL.md)
 
