@@ -1418,3 +1418,55 @@ def test_member_of_handoffs_and_last_handoff(repo):
     assert "green locally" in d["last_handoff"]["text"]
     assert "last handoff:" in repo.run("brief", m1).stdout
     assert repo.j("brief", m2)["data"]["last_handoff"] is None
+
+
+
+# --- untested surface from the docs review (sweep 2026-09-02, task L) -------
+
+def test_scan_since_and_multi_sha_link_unlink(repo):
+    tid = repo.add_task("Ranges")
+    repo.j("claim", tid)
+    (repo.root / "one.py").write_text("1", encoding="utf-8")
+    first = repo.commit_all("First work", (f"Ledger-Task: {tid}",))
+    (repo.root / "two.py").write_text("2", encoding="utf-8")
+    second = repo.commit_all("Second work", (f"Ledger-Task: {tid}",))
+    d = repo.j("scan", "--since", first)["data"]
+    assert [x["sha"] for x in d["linked"]] == [second[:7]]
+    assert d["commits_scanned"] == 1
+    d = repo.j("link", tid, first, second)
+    assert [i["sha7"] for i in d["data"]["linked"]] == [first[:7], second[:7]]
+    d = repo.j("unlink", tid, first, second, "--why", "both wrong")
+    assert d["data"]["unlinked"] == [first[:7], second[:7]]
+    assert repo.j("show", tid)["data"]["commits"] == []
+
+
+def test_no_such_question_and_bad_row(repo):
+    tid = repo.add_task("Questions")
+    repo.j("question", tid, "add", "only one?")
+    d = repo.j("question", tid, "resolve", "nothing like this", "--answer",
+               "x", expect=2)
+    assert d["errors"][0]["code"] == "no-such-question"
+    assert "brief" in d["errors"][0]["fix_hint"]
+    d = repo.j("answers", "apply", "-", expect=2,
+               input=json.dumps([{"task": tid, "text": "nope?", "answer": "a"},
+                                 {"answer": "no task key"}]))
+    codes = {e["code"] for e in d["errors"]}
+    assert codes == {"no-such-question", "bad-row"}
+
+
+def test_git_verbs_refuse_without_a_repository(plain):
+    tid = plain.add_task("No git here")
+    for call in (("link", tid, "HEAD"), ("unlink", tid, "abc1234"), ("scan",)):
+        d = plain.j(*call, expect=2)
+        assert d["errors"][0]["code"] in ("no-git", "no-such-commit-line"), call
+
+
+def test_answers_apply_refuses_a_corrupt_target(repo):
+    tid = repo.add_task("Corrupt target")
+    repo.j("question", tid, "add", "q?", "--human")
+    repo.write(tid, repo.read(tid).replace("status: todo", "status: todo\nstatus: done"))
+    before = repo.read(tid)
+    d = repo.j("answers", "apply", "-", expect=2,
+               input=json.dumps([{"task": tid, "text": "q?", "answer": "a"}]))
+    assert any(e["code"] == "corrupt-file" for e in d["errors"])
+    assert repo.read(tid) == before

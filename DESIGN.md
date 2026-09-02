@@ -65,7 +65,8 @@ state is either a per-task file or git history itself (the gitignored
   "exempt_allowed_paths": ["docs/**", "*.md", ".github/**", ".gitignore",
                            ".gitattributes", "LICENSE*", "*.lock",
                            "package-lock.json", "tests/test_ledger.py"],
-  "exempt_policy_since": "<sha written by init --enable-exempt-policy: older commits are not path-checked>"
+  "exempt_policy_since": "<sha written by init --enable-exempt-policy: older commits are not path-checked>",
+  "protocol_adapters": ["CLAUDE.md"]
 }
 ```
 
@@ -285,9 +286,9 @@ only when its text still matches, else the merge-safe substring; shares
 `_answer_question` with `question resolve` so the two cannot drift),
 `brief [--last N]` (also `show --brief` / `next --brief`: the bounded digest
 — open steps with their original indexes, HUMAN-gated questions with who
-answered, `note(dead-end)` entries uncapped, the N newest Log entries by
-timestamp, commits, dependents, a Spec LINE COUNT only so the one file read
-stays the authority; nothing between `list`'s counts and `show`'s
+answered, `note(dead-end)` entries, the N newest Log entries by timestamp,
+commits, dependents (every family capped, see the budgets bullet), a Spec
+LINE COUNT only so the one file read stays the authority; nothing between `list`'s counts and `show`'s
 everything existed before, and the review's §23 "bounded view" is the
 retrieval half of never-lossy Log handling). (Exact flags: `--help` or
 README.)
@@ -680,7 +681,7 @@ deterministic token-overlap hint; a model's opinion must never gate CI).
     canonical channel stays honest).
 11. **Coverage scope:** EVERY commit in `baseline..HEAD` needs a trailer, an
     exemption, or to touch only ledger bookkeeping paths (`.ledger/tasks/**`,
-    `PROTOCOL.md`; since 2026-09-02 not `ledger.py` or `config.json`) — path-glob scoping silently
+    `PROTOCOL.md`, the lock file; since 2026-09-02 not `ledger.py` or `config.json`) — path-glob scoping silently
     shrinks the guarantee. (`exempt_allowed_paths`, 2026-09-01, scopes which
     commits may claim EXEMPT, not which need a trailer — it only ever makes
     the guarantee stricter.)

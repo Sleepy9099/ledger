@@ -102,7 +102,7 @@ next --claim      the agent entry point: highest-priority eligible task,
 add "title" -p p1 -s m --spec -      create a task (spec via stdin);
     [--after <id>] [--tag t]         --after = scheduler-visible dependency;
                                      warns (never refuses) on similar titles
-brief <id> [--last N]                bounded digest: open steps, HUMAN
+brief <id> [--last N] [--no-git]     bounded digest: open steps, HUMAN
                                      questions, dead ends, recent Log — every
                                      family capped; `truncated` says what was
                                      cut and how to fetch it (Spec = the file)
@@ -111,7 +111,8 @@ list --member-of <id>                a wave's members with their status
 list --depends-on <id> [--tag wave]  show carries dependents; this is the
                                      reverse lookup, e.g. which wave held T-x)
 set <id> --priority|--size|--title   edit header fields; --add-depends /
-    |--add-depends|--remove-depends  --remove-depends keep the DAG honest
+    |--add-depends|--remove-depends  --remove-depends keep the DAG honest;
+    |--add-tag|--remove-tag [--force] a resource:<slug> tag is a lease
 search TERM... [--any] [--regex]     ranked retrieval across every task
     [--in title,spec,log] [--open]   (search before filing; dead ends and
                                      landmines live on other tasks)
@@ -136,13 +137,15 @@ answers apply <file|->               record answers in batch: feed back the
                                      are written one at a time — re-run after
                                      a crash: answered rows skip)
 claim / release --note "handoff"     session start / session end
+    [--force]                        take over / strip a foreign FRESH claim
 list --resource <slug>               tasks declaring a resource lease
 list --mine                          everything this session holds (the
                                      session-end release list; next --json
                                      also carries it as `held`)
 release <id> --blocked --on "external: ready for integration" --note "..."
                                      hand off to an integrator (PROTOCOL.md)
-block <id> --on human|T-x|external:  explicit blockage; unblock reverses
+block <id> --on human|T-x|external:  explicit blockage; unblock [--force]
+                                     reverses (--force re-takes a lease)
                                      (done/drop/next flag blocks whose
                                      target task has since closed)
 link <id> <sha|HEAD>                 attach commit evidence
@@ -153,8 +156,9 @@ scan --write [--prune]               reconcile git trailers -> ## Commits;
                                      --prune drops pointers no longer
                                      reachable from HEAD (history rewrite)
 done <id> [--commit HEAD]            close with evidence; refuses on open
-                                     steps/questions; closed is terminal
-drop <id> --why "..."                close as won't-do (files never deleted);
+    [--no-code "why"] [--force]      steps/questions; closed is terminal
+                                     (--force: foreign-claim guard only)
+drop <id> --why "..." [--force]      close as won't-do (files never deleted);
      [--duplicate-of|--superseded-by <id>]  names the survivor machine-visibly
 validate [--coverage] [--strict]     every invariant; exit 1 on violations
 doctor                               offline: tool/schema/protocol versions,
