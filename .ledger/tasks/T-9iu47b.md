@@ -1,12 +1,11 @@
 ---
 id: T-9iu47b
 title: Wave-as-task convention: dependents lookup, list --depends-on, journaled add
-status: in_progress
+status: done
 priority: p2
 size: s
 created: 2026-09-01T23:48:39Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T01:36:52Z
+closed: 2026-09-02T01:48:16Z
 tags: orchestration
 ---
 
@@ -57,6 +56,8 @@ Older copies parse, validate and schedule a wave task identically; they merely l
 
 ## Commits
 
+- 9f7feaf 2026-09-01 Wave-as-task convention: dependents lookup, list --depends-on, journaled add
+
 ## Log
 
 - 2026-09-01T23:48:39Z [claude-2026-09-01-a] add: created: Wave-as-task convention: dependents lookup, list --depends-on, journaled add
@@ -70,3 +71,5 @@ Older copies parse, validate and schedule a wave task identically; they merely l
 - 2026-09-02T01:43:00Z [claude-2026-09-01-b] step: checked 'list --depends-on <fragment>; add journals [prio/size] (after: ...) (tags: ...)'
 - 2026-09-02T01:43:00Z [claude-2026-09-01-b] step: checked 'DESIGN §8 expansion + §11 cross-reference; README Daily commands rows for add --after/--tag and list --depends-on'
 - 2026-09-02T01:43:01Z [claude-2026-09-01-b] step: checked 'Tests: dependents/depends-on, add Log line, end-to-end wave scenario in test_git_integration, op_add extension in test_property'
+- 2026-09-02T01:48:16Z [claude-2026-09-01-b] link: 9f7feaf Wave-as-task convention: dependents lookup, list --depends-on, journaled add
+- 2026-09-02T01:48:16Z [claude-2026-09-01-b] done: evidence: 9f7feaf
