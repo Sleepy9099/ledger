@@ -1,12 +1,11 @@
 ---
 id: T-w7emjt
 title: Lock handle keyed per ledger directory; report tip search from the in-memory parent map
-status: in_progress
+status: done
 priority: p2
 size: xs
 created: 2026-09-02T11:44:58Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T12:11:42Z
+closed: 2026-09-02T12:17:14Z
 tags: concurrency, performance
 ---
 
@@ -22,7 +21,11 @@ tags: concurrency, performance
 
 ## Commits
 
+- ece44c7 2026-09-02 Lock handles keyed per ledger directory; report tips from the parent map
+
 ## Log
 
 - 2026-09-02T11:44:58Z [claude-2026-09-01-b] add: created: Lock handle keyed per ledger directory; report tip search from the in-memory parent map [p2/xs] (tags: concurrency, performance)
 - 2026-09-02T12:11:42Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T12:17:14Z [claude-2026-09-01-b] link: ece44c7 Lock handles keyed per ledger directory; report tips from the parent map
+- 2026-09-02T12:17:14Z [claude-2026-09-01-b] done: evidence: ece44c7
