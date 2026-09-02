@@ -17,6 +17,11 @@ def test_init_idempotent_and_bootstrap_files(repo):
     claude = (repo.root / "CLAUDE.md").read_text(encoding="utf-8")
     assert "<!-- LEDGER:BEGIN -->" in claude and "<!-- LEDGER:END -->" in claude
     assert "Ledger protocol" in claude
+    # the repair the protocol promises for a pushed commit is true (T-5z04ex)
+    protocol = (ledger / "PROTOCOL.md").read_text(encoding="utf-8")
+    assert "ledger link <id> <sha>" in protocol
+    assert "explicit link counts as coverage" in protocol
+    assert "Unpushed: amend" in protocol
     # re-init must not duplicate the protocol block or gitattributes line
     repo.j("init")
     claude2 = (repo.root / "CLAUDE.md").read_text(encoding="utf-8")

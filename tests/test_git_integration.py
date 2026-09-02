@@ -250,3 +250,92 @@ def test_shallow_clone_refused(repo, tmp_path):
     assert rc == 1
     assert any(e["code"] == "coverage" and "shallow" in e["message"]
                for e in payload["errors"])
+
+
+# --- coverage repair: explicit links count, multi-id trailers (T-5z04ex) ---
+
+def test_link_repairs_a_pushed_untrailered_commit(repo):
+    tid = repo.add_task("Forgot the trailer")
+    repo.j("claim", tid)
+    (repo.root / "oops.py").write_text("x\n", encoding="utf-8")
+    sha = repo.commit_all("Work without a trailer")
+    rc, payload = validate(repo, "--coverage")
+    cov = [e for e in payload["errors"] if e["code"] == "coverage"]
+    assert rc == 1 and cov
+    hint = cov[0]["fix_hint"]
+    assert "amend" in hint and f"ledger link <id> {sha[:7]}" in hint
+    assert "ledger add" in hint and "never for code without a task" in hint
+    repo.j("link", tid, sha)  # the repair the protocol promises
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]
+    d = repo.j("scan")["data"]
+    assert {"sha": sha[:7], "task": tid, "via": "link"} in d["linked"]
+    assert d["unlinked"] == []
+    # a ## Commits line alone (hand-edited cache, no link: Log line) is NOT
+    # coverage — both halves of the explicit link are required
+    other = repo.add_task("Hand-edited commits cache")
+    (repo.root / "oops2.py").write_text("y\n", encoding="utf-8")
+    sha2 = repo.commit_all("Second untrailered")
+    repo.write(other, repo.read(other).replace(
+        "## Commits", f"## Commits\n\n- {sha2[:7]} 2026-01-01 forged"))
+    rc, payload = validate(repo, "--coverage")
+    assert any(e["code"] == "coverage" and sha2[:7] in e["message"]
+               for e in payload["errors"])
+
+
+def test_done_commit_link_counts_as_coverage(repo):
+    tid = repo.add_task("Closed via --commit")
+    repo.j("claim", tid)
+    (repo.root / "w.py").write_text("w\n", encoding="utf-8")
+    repo.commit_all("Untrailered but closed with --commit HEAD")
+    repo.j("done", tid, "--commit", "HEAD")
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]
+
+
+def test_multi_id_trailer_line_is_diagnosed_never_linked(repo):
+    a = repo.add_task("A side")
+    b = repo.add_task("B side")
+    (repo.root / "m.py").write_text("m\n", encoding="utf-8")
+    sha = repo.commit_all("Two ids on one line", (f"Ledger-Task: {a}, {b}",))
+    rc, payload = validate(repo, "--coverage")
+    dang = [e for e in payload["errors"] if e["code"] == "trailer-dangling"]
+    assert len(dang) == 1 and "several" in dang[0]["message"]
+    assert "one 'Ledger-Task: <id>' line per task" in dang[0]["fix_hint"]
+    assert "ledger link" in dang[0]["fix_hint"]
+    d = repo.j("scan")["data"]
+    assert d["linked"] == []  # tokens are diagnostics, never linkage
+    assert d["dangling"] == [{"sha": sha[:7], "id": f"{a}, {b}",
+                              "hint": "multi-id-line"}]
+    refused = repo.j("done", a, expect=2)
+    assert refused["errors"][0]["code"] == "done-evidence"
+    # the repair: an explicit link supersedes the dangling line
+    repo.j("link", a, sha)
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]
+
+
+def test_trailer_with_extra_text_and_exempt_line_still_dangles(repo):
+    a = repo.add_task("Partial")
+    (repo.root / "p.py").write_text("p\n", encoding="utf-8")
+    repo.commit_all("Extra text", (f"Ledger-Task: {a} (partial)",))
+    rc, payload = validate(repo, "--coverage")
+    dang = [e for e in payload["errors"] if e["code"] == "trailer-dangling"]
+    assert len(dang) == 1 and "extra text" in dang[0]["message"]
+    assert "several" not in dang[0]["message"]
+    assert f"exactly 'Ledger-Task: {a}'" in dang[0]["fix_hint"]
+    assert repo.j("scan")["data"]["dangling"][0]["hint"] == "extra-text"
+    # Ledger-Exempt clears coverage for the commit but not the dangling id
+    (repo.root / "q.py").write_text("q\n", encoding="utf-8")
+    # both lines in ONE final paragraph (separate -m args would make only
+    # the last paragraph count, per git trailer semantics)
+    repo.commit_all("Exempt with a ghost",
+                    ("Ledger-Task: T-gh0st9\nLedger-Exempt: fixture",))
+    rc, payload = validate(repo, "--coverage")
+    codes_seen = codes(payload)
+    assert "trailer-dangling" in codes_seen
+    assert not any(e["code"] == "coverage" and "ghost" in e["message"].lower()
+                   for e in payload["errors"])
+    unknown = [e for e in payload["errors"] if e["code"] == "trailer-dangling"
+               and "T-gh0st9" in e["message"]]
+    assert unknown and "restore it from git history" in unknown[0]["fix_hint"]

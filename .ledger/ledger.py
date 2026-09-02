@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.1.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -167,8 +167,9 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
   Checkbox lines must be exactly `- [ ] text` / `- [x] text`.
 - EVERY commit that advances a task ends with a trailer line:
   `Ledger-Task: <id>` (one per related task). Genuinely unrelated
-  commits use `Ledger-Exempt: <short reason>`. Forgot on a pushed
-  commit? Repair with `ledger link <id> <sha>`.
+  commits use `Ledger-Exempt: <short reason>`. Forgot the trailer?
+  Unpushed: amend the message. Pushed: `ledger link <id> <sha>` — an
+  explicit link counts as coverage.
 - Commit `.ledger/` changes together with the code they describe.
 
 ## Finishing a task
@@ -702,11 +703,55 @@ def compile_exempt_patterns(config: dict) -> list[re.Pattern]:
     return out
 
 
+SHA_TOKEN_RE = re.compile(r"[0-9a-f]{7,40}")
+
+
+def explicit_links(tasks: list) -> dict[str, set[tuple[str, str]]]:
+    """sha prefix (first 7 chars) -> {(sha_token, task_id)} for every
+    `## Commits` line whose task Log ALSO carries a CLI-authored `link:` line
+    naming the same commit.
+
+    Both halves are required: the Commits line alone is a cache anyone can
+    hand-edit; the Log line is sha-verified at write time, actor-tagged and
+    tamper-protected once committed. Together they are an explicit claim on
+    a par with a trailer (DESIGN §4) — never inferred linkage.
+    """
+    out: dict[str, set[tuple[str, str]]] = {}
+    for t in tasks:
+        tokens = []
+        for e in t.log():
+            if e["verb"] != "link":
+                continue
+            first = e["text"].split(" ", 1)[0]
+            if SHA_TOKEN_RE.fullmatch(first):
+                tokens.append(first)
+        for c in t.commits():
+            s = c["sha"]
+            if any(s.startswith(tok) or tok.startswith(s) for tok in tokens):
+                out.setdefault(s[:7], set()).add((s, t.id))
+    return out
+
+
+def explicit_link_tasks(commit: Commit,
+                        explicit: dict | None) -> list[str]:
+    if not explicit:
+        return []
+    return sorted({tid for s, tid in explicit.get(commit.sha[:7], ())
+                   if commit.sha.startswith(s)})
+
+
 def classify_commit(commit: Commit, repo: Path, known_ids: set[str],
-                    exempt_res: list[re.Pattern]) -> tuple[str, list[str]]:
-    """Returns (bucket, dangling_ids). Buckets: linked | exempt | unlinked."""
+                    exempt_res: list[re.Pattern],
+                    explicit: dict | None = None) -> tuple[str, list[str]]:
+    """Returns (bucket, dangling_ids). Buckets: linked | exempt | unlinked.
+
+    `explicit` is explicit_links(); a commit an agent linked with
+    `ledger link` after pushing counts as linked exactly like a trailer.
+    """
     dangling = [t for t in commit.task_ids if t not in known_ids]
     if any(t in known_ids for t in commit.task_ids):
+        return "linked", dangling
+    if explicit_link_tasks(commit, explicit):
         return "linked", dangling
     if commit.exempt_reason is not None:
         return "exempt", dangling
@@ -1800,15 +1845,23 @@ def cmd_scan(args) -> int:
     if commits is None:
         raise LedgerError("coverage", error or "git walk failed")
     exempt_res = compile_exempt_patterns(ctx.config)
+    explicit = explicit_links(tasks)
+    id_token_re = id_token_pattern(ctx.prefix)
     linked, exempt, unlinked, dangling = [], [], [], []
     for c in commits:
-        bucket, bad_ids = classify_commit(c, repo, known, exempt_res)
-        for tid in bad_ids:
-            dangling.append({"sha": c.sha7, "id": tid})
+        bucket, bad_ids = classify_commit(c, repo, known, exempt_res, explicit)
+        for raw in bad_ids:
+            dangling.append({"sha": c.sha7, "id": raw,
+                             "hint": _dangling_kind(raw, id_token_re)})
         if bucket == "linked":
             for tid in c.task_ids:
                 if tid in known:
-                    linked.append({"sha": c.sha7, "task": tid})
+                    linked.append({"sha": c.sha7, "task": tid,
+                                   "via": "trailer"})
+            for tid in explicit_link_tasks(c, explicit):
+                if not any(x["sha"] == c.sha7 and x["task"] == tid
+                           for x in linked):
+                    linked.append({"sha": c.sha7, "task": tid, "via": "link"})
         elif bucket == "exempt":
             exempt.append(c.sha7)
         else:
@@ -1826,7 +1879,8 @@ def cmd_scan(args) -> int:
     for u in unlinked:
         human.append(f"  unlinked {u['sha']}: {u['subject']}")
     for d in dangling:
-        human.append(f"  dangling {d['sha']}: trailer names unknown id {d['id']}")
+        human.append(f"  dangling {d['sha']}: trailer names unknown id "
+                     f"{d['id']} ({d['hint']})")
     if backfilled:
         human.append(f"  backfilled {len(backfilled)} commit line(s)")
     emit(args, True, data, errors=problems, human=human)
@@ -2300,6 +2354,62 @@ def _tamper_violations(patch: str, where: str, violations: list[dict]) -> None:
                          "history"))
 
 
+def id_token_pattern(prefix: str) -> re.Pattern:
+    """Unanchored id matcher for prose / trailer text (ctx.id_pattern() is
+    ^$-anchored and unusable there). Tokens found this way are NEVER used
+    for linkage — one canonical trailer syntax (decision #10)."""
+    return re.compile(rf"{re.escape(prefix)}-[a-z0-9]{{6}}(?![a-z0-9])")
+
+
+PUSHED_LINK_GUIDANCE = (
+    "if pushed, `ledger link <id> {sha7}` — an explicit, sha-verified link "
+    "counts as coverage")
+
+
+def coverage_fix_hint(sha7: str) -> str:
+    """Ordered remedies: trailer first, link if pushed, add a task if none
+    owns the work, exempt last and only for non-product commits."""
+    return (
+        "1) unpushed: add `Ledger-Task: <id>` to the message's LAST paragraph "
+        "(git commit --amend / rebase; a blank line before Co-Authored-By "
+        "puts it out of scope); 2) " + PUSHED_LINK_GUIDANCE.format(sha7=sha7)
+        + "; 3) no task owns this work: `ledger add` one first, then link; "
+        "`Ledger-Exempt: <reason>` is only for commits with no product-work "
+        "obligation (merge/revert mechanics, ledger bookkeeping, generated "
+        "artifacts, docs, CI metadata) — never for code without a task")
+
+
+def _dangling_kind(raw: str, id_token_re: re.Pattern) -> str:
+    tokens = id_token_re.findall(raw)
+    if len(tokens) >= 2:
+        return "multi-id-line"
+    if len(tokens) == 1 and raw.strip() != tokens[0]:
+        return "extra-text"
+    return "unknown-id"  # well-formed but unknown, or not id-shaped at all
+
+
+def _dangling_diagnostic(c: Commit, raw: str,
+                         id_token_re: re.Pattern) -> tuple[str, str]:
+    kind = _dangling_kind(raw, id_token_re)
+    pushed = PUSHED_LINK_GUIDANCE.format(sha7=c.sha7) + \
+        " and supersedes the dangling id"
+    if kind == "multi-id-line":
+        return (f"commit {c.sha7} trailer names several task ids on one "
+                f"line: '{raw}'",
+                "one 'Ledger-Task: <id>' line per task — rewrite the message "
+                "if unpushed; " + pushed)
+    if kind == "extra-text":
+        tok = id_token_re.findall(raw)[0]
+        return (f"commit {c.sha7} trailer carries extra text after the id: "
+                f"'{raw}'",
+                f"the line must be exactly 'Ledger-Task: {tok}' — rewrite "
+                "the message if unpushed; " + pushed)
+    return (f"commit {c.sha7} trailer names unknown task id '{raw}'",
+            "fix the id in the message if unpushed (git commit --amend / "
+            "rebase); " + pushed + " (if the task file was deleted, restore "
+            "it from git history instead — log-tamper names it)")
+
+
 def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
     violations: list[dict] = []
     repo = ctx.repo
@@ -2369,17 +2479,17 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
         return violations
 
     exempt_res = compile_exempt_patterns(ctx.config)
+    explicit = explicit_links(tasks)
+    id_token_re = id_token_pattern(ctx.prefix)
     exempt_count = 0
     for c in commits:
-        bucket, dangling = classify_commit(c, repo, known, exempt_res)
-        for tid in dangling:
-            violations.append(err(
-                "trailer-dangling",
-                f"commit {c.sha7} trailer names unknown task id '{tid}'",
-                fix_hint=f"'{tid}' is in {c.sha7}'s MESSAGE, so ledger "
-                         "link cannot change it: rewrite the message with "
-                         "a real id, or restore the task file that "
-                         "carried it"))
+        bucket, dangling = classify_commit(c, repo, known, exempt_res, explicit)
+        # an explicit link is the corrected claim: the typo'd id stays in the
+        # immutable message, so flagging it would be unrepairable
+        if dangling and not explicit_link_tasks(c, explicit):
+            for raw in dangling:
+                msg, hint = _dangling_diagnostic(c, raw, id_token_re)
+                violations.append(err("trailer-dangling", msg, fix_hint=hint))
         if bucket == "exempt":
             exempt_count += 1
         elif bucket == "unlinked":
@@ -2387,13 +2497,7 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
                 "coverage",
                 f"commit {c.sha7} ('{c.subject}') has no Ledger-Task/"
                 "Ledger-Exempt trailer",
-                fix_hint="put a Ledger-Task/Ledger-Exempt trailer in the "
-                         "message's LAST paragraph — a blank line before "
-                         "Co-Authored-By puts it out of scope. Rewrite "
-                         "the MESSAGE: git commit --amend if " + c.sha7
-                         + " is HEAD. ledger link does NOT clear this — "
-                         "it writes ## Commits, which this check never "
-                         "reads."))
+                fix_hint=coverage_fix_hint(c.sha7)))
     if commits:
         violations.append(err(
             "exempt-ratio",

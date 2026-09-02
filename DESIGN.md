@@ -20,9 +20,10 @@ two's priorities):**
   one small per-task file, so git's ordinary line merge almost never
   conflicts, and the rare conflict is 1 line or keep-both.
 - *Verifiability:* honesty is enforced against git history, never against
-  agent claims — commit trailers are the audit truth, `validate --coverage`
-  cross-checks history against task files, and every violation carries a
-  machine-actionable `fix_hint`.
+  agent claims — commit trailers (and explicit, sha-verified `ledger link`
+  records) are the audit truth, `validate --coverage` cross-checks history
+  against task files, and every violation carries a machine-actionable
+  `fix_hint`.
 
 ---
 
@@ -145,7 +146,19 @@ example, protocol text inside a squash message) is not a claim.
 
 **Secondary channel:** `ledger link <id> <sha|HEAD>` verifies the sha exists,
 appends to `## Commits` (dedup), and logs the link with the actor — retroactive
-links are themselves auditable.
+links are themselves auditable, and they COUNT FOR COVERAGE: a commit is
+linked iff a trailer names a known id OR some task's `## Commits` carries its
+sha AND that task's Log holds the matching `link:` line. Both halves are
+required — the Commits line is a cache anyone can hand-edit; the Log line is
+CLI-authored, sha-verified at write time, actor-tagged and tamper-protected
+once committed — so an explicit link is an explicit claim on a par with a
+trailer, not the inferred linkage banned below. It is the one truthful
+repair for a forgotten trailer on a pushed commit, whose message is
+immutable (an exemption would be a lie; moving `baseline` hides history).
+An explicit link also supersedes a dangling id in that commit's trailer, so
+a typo'd id never becomes a permanent strict-CI failure. A trailer line
+naming several ids (`Ledger-Task: T-a, T-b`) is diagnosed as such but never
+used for linkage — one canonical syntax (decision #10).
 
 **Reconciliation:** `ledger scan` classifies every commit in `baseline..HEAD`
 as **linked** / **exempt** (Ledger-Exempt, `exempt_patterns` match, or touches
@@ -158,11 +171,15 @@ clean merge introduces nothing but an evil merge's conflict-resolution
 content is in scope), and a git failure classifies as unlinked — coverage
 never passes on a guess.
 
-**Why it stays honest:** coverage is computed FROM git history, never from
-task-file assertions; trailers are immutable once pushed; exemptions need an
-explicit reason (and the exempt ratio is reported so abuse is visible); `done`
-refuses to close without evidence; a trailer against a never-claimed task is
-flagged (`linked-never-claimed`).
+**Why it stays honest:** coverage is computed FROM git history plus
+explicit, sha-verified link records — never from prose, branch names or file
+overlap; trailers are immutable once pushed; exemptions need an explicit
+reason (and the exempt ratio is reported so abuse is visible); `done` refuses
+to close without evidence; a trailer against a never-claimed task is flagged
+(`linked-never-claimed`). The `coverage` fix_hint orders the remedies:
+trailer (amend if unpushed), link (if pushed), `ledger add` a task if none
+owns the work, and `Ledger-Exempt` last — only for commits with no
+product-work obligation, never for code without a task.
 
 ## 5. CLI
 

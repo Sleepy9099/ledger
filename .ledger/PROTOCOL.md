@@ -35,8 +35,9 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
   Checkbox lines must be exactly `- [ ] text` / `- [x] text`.
 - EVERY commit that advances a task ends with a trailer line:
   `Ledger-Task: <id>` (one per related task). Genuinely unrelated
-  commits use `Ledger-Exempt: <short reason>`. Forgot on a pushed
-  commit? Repair with `ledger link <id> <sha>`.
+  commits use `Ledger-Exempt: <short reason>`. Forgot the trailer?
+  Unpushed: amend the message. Pushed: `ledger link <id> <sha>` — an
+  explicit link counts as coverage.
 - Commit `.ledger/` changes together with the code they describe.
 
 ## Finishing a task

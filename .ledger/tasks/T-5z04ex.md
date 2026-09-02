@@ -1,10 +1,12 @@
 ---
 id: T-5z04ex
 title: Coverage repair: ledger link cannot fix a pushed untrailered commit
-status: todo
+status: in_progress
 priority: p1
 size: s
 created: 2026-09-01T23:48:39Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T00:56:02Z
 tags: integrity, protocol
 ---
 
@@ -42,10 +44,10 @@ Recommendation: (b). Under (a) the only ways to green CI after a forgotten trail
 
 ## Next Steps
 
-- [ ] Human answers the (a)/(b) question below; unblock
-- [ ] Rewrite the coverage and trailer-dangling fix_hints and the PROTOCOL_TEXT 'Forgot on a pushed commit?' sentence per the answer; regenerate PROTOCOL.md/CLAUDE.md with init
-- [ ] Add the multi-id trailer-line diagnostic to validate_git and scan (message/hint only, no linkage)
-- [ ] Tests in tests/test_git_integration.py per the spec; DESIGN §4 amended per the answer
+- [x] Human answers the (a)/(b) question below; unblock
+- [x] Rewrite the coverage and trailer-dangling fix_hints and the PROTOCOL_TEXT 'Forgot on a pushed commit?' sentence per the answer; regenerate PROTOCOL.md/CLAUDE.md with init
+- [x] Add the multi-id trailer-line diagnostic to validate_git and scan (message/hint only, no linkage)
+- [x] Tests in tests/test_git_integration.py per the spec; DESIGN §4 amended per the answer
 
 ## Open Questions
 
@@ -65,3 +67,9 @@ Recommendation: (b). Under (a) the only ways to green CI after a forgotten trail
 - 2026-09-02T00:33:21Z [claude-2026-09-01-b] note: Session claude-2026-09-01-b found an uncommitted partial rewrite of the coverage/trailer-dangling fix_hints (option-a wording) in ledger.py; discarded it uncommitted because the (a)/(b) decision is still open — the Spec's Design section already carries everything needed to implement either answer
 - 2026-09-02T00:54:55Z [claude-2026-09-01-b] answer: 'HUMAN: Pushed commit without a trailer: (a) keep DESIGN §4 (coverage from trailers only) and make the fix_hint/protocol say the commit stays flagged unless exempt/baseline is moved by the operator, or (b) let an explicit `ledger link` (sha-verified, actor-tagged, tamper-protected `link:` Log line + ## Commits line) count as coverage for that sha? Recommendation: (b) — (a) leaves only a lying exemption or a hidden baseline move as repairs.' -> (b) an explicit ledger link counts as coverage. Operator criteria 2026-09-01: agents need a truthful repair for a pushed untrailered commit; (a) leaves only a lying exemption or a hidden baseline move, which strands an autonomous agent in unrepairable strict CI. The link line is sha-verified, actor-tagged and tamper-protected, so it is an explicit claim, not inferred linkage.
 - 2026-09-02T00:54:55Z [claude-2026-09-01-b] unblock: -> todo
+- 2026-09-02T00:56:02Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T00:56:02Z [claude-2026-09-01-b] step: checked 'Human answers the (a)/(b) question below; unblock'
+- 2026-09-02T01:06:27Z [claude-2026-09-01-b] step: checked 'Rewrite the coverage and trailer-dangling fix_hints and the PROTOCOL_TEXT 'Forgot on a pushed commit?' sentence per the answer; regenerate PROTOCOL.md/CLAUDE.md with init'
+- 2026-09-02T01:06:27Z [claude-2026-09-01-b] step: checked 'Add the multi-id trailer-line diagnostic to validate_git and scan (message/hint only, no linkage)'
+- 2026-09-02T01:06:27Z [claude-2026-09-01-b] step: checked 'Tests in tests/test_git_integration.py per the spec; DESIGN §4 amended per the answer'
+- 2026-09-02T01:06:27Z [claude-2026-09-01-b] note: The discarded option-(a) hint wording nevertheless reached commit 88863da (T-71aehi) — the working tree was restored between checkout and that commit, cause unknown (OneDrive sync suspected). Replaced here by the option-(b) implementation; no functional effect in between.

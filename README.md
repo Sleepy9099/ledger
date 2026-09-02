@@ -56,7 +56,10 @@ refuses shallow clones rather than passing vacuously.
   ends with `Ledger-Task: T-xxxxxx`; genuinely unrelated commits carry
   `Ledger-Exempt: <reason>`. `validate --coverage` walks `baseline..HEAD` and
   fails on any commit with neither (commits touching only `.ledger/` and
-  subjects matching `exempt_patterns` in config.json are exempt).
+  subjects matching `exempt_patterns` in config.json are exempt). Forgot the
+  trailer on a pushed commit? `ledger link <id> <sha>` — the sha-verified,
+  actor-tagged link line counts as coverage; a hand-edited `## Commits` line
+  alone never does.
 - **`done` requires evidence**: at least one linked commit, or an explicit
   `--no-code "reason"`. Unanswered `HUMAN:` questions block closing.
 - **IDs are random** (`T-` + 6 of `[a-z0-9]`), so parallel branches never
