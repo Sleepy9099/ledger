@@ -151,6 +151,17 @@ guarantee (coverage, evidence-on-done, state coherence) is checked against git
 history and file structure, never against Log prose. `log-tamper`
 machine-checks that Log lines are never deleted.
 
+**Human-in-the-loop authority (stated plainly, 2026-09-02):** the `HUMAN:`
+marker records who SHOULD decide; `question resolve` and `answers apply`
+record which SESSION applied an answer. Any session can apply one, so the
+ledger gives the operator visibility and a durable record of decisions —
+not an enforceable approval boundary; it cannot prove a human supplied the
+answer. That is the honest-agent local model this tool is built for. A host
+that needs enforcement must supply it outside the ledger (a sandbox that
+withholds `question resolve` / `answers apply` from autonomous sessions, or
+an out-of-band signed answer channel); a per-command "operator-only" flag
+inside the tool would be an agent assertion and is deliberately not offered.
+
 ## 4. Commit linking
 
 **Primary channel — commit trailers (the truth):** every commit that advances

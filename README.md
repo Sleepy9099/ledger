@@ -122,6 +122,10 @@ questions [--human] [--task <id>]    the operator decision view: open
                                      (options, recommendation), task state,
                                      a grouping key, plus every task blocked
                                      on human with its recorded reason
+                                     NOTE: a HUMAN: marker records who SHOULD
+                                     decide; the answer line records which
+                                     session APPLIED it — the ledger cannot
+                                     prove a human supplied it (see DESIGN §3)
 answers apply <file|->               record answers in batch: feed back the
                                      `questions --json` envelope with an
                                      `answer` on each row (every row is
