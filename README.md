@@ -246,6 +246,8 @@ the tool's own roadmap).
   this is the file you copy into other repos)
 - [.ledger/PROTOCOL.md](.ledger/PROTOCOL.md) — the agent protocol, verbatim
 - [DESIGN.md](DESIGN.md) — the full design rationale and decision record
-- [tests/](tests/) — the tool's own suite (`python -m pytest`): format
-  round-trips, CLI contract, one fixture per validation code, real-git merge
-  scenarios, and an anti-corruption property test
+- [tests/](tests/) — the tool's own suite (`python -m pytest`; with
+  `pip install pytest-xdist`, `python -m pytest -n auto` runs it several
+  times faster — every test owns a temp repo): format round-trips, CLI
+  contract, one fixture per validation code, real-git merge scenarios, and
+  an anti-corruption property test
