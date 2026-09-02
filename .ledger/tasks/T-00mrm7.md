@@ -1,12 +1,11 @@
 ---
 id: T-00mrm7
 title: ledger report: derived read-only wave and backlog metrics
-status: in_progress
+status: done
 priority: p3
 size: m
 created: 2026-09-01T23:48:40Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T03:07:34Z
+closed: 2026-09-02T03:28:10Z
 depends_on: T-71aehi, T-9iu47b, T-w0emnj
 tags: metrics, orchestration
 ---
@@ -49,6 +48,8 @@ tests/test_cli.py: a small ledger exercising every counter (three priorities, a 
 
 ## Commits
 
+- 699f951 2026-09-01 Add ledger report: derived, never-stored wave and backlog metrics
+
 ## Log
 
 - 2026-09-01T23:48:40Z [claude-2026-09-01-a] add: created: ledger report: derived read-only wave and backlog metrics
@@ -67,3 +68,5 @@ tests/test_cli.py: a small ledger exercising every counter (three priorities, a 
 - 2026-09-02T03:16:14Z [claude-2026-09-01-b] step: checked 'Human answers the §11 question; unblock only once the trigger below has fired'
 - 2026-09-02T03:16:14Z [claude-2026-09-01-b] step: checked 'Implement the read-only command over headers, Log lines and walk_commits (+ one %cI pass); sources flags'
 - 2026-09-02T03:16:15Z [claude-2026-09-01-b] step: checked 'README 'Operator diagnostics' section (not Daily commands); DESIGN §5/§11 note; tests'
+- 2026-09-02T03:28:10Z [claude-2026-09-01-b] link: 699f951 Add ledger report: derived, never-stored wave and backlog metrics
+- 2026-09-02T03:28:10Z [claude-2026-09-01-b] done: evidence: 699f951
