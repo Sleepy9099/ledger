@@ -516,3 +516,76 @@ def test_next_and_closing_verbs_signal_blocks_on_closed_tasks(repo):
     assert repo.j("show", g)["data"]["header"]["status"] == "in_progress"
     assert not any(s["id"] == g
                    for s in repo.j("next")["data"]["stale_blocks"])
+
+
+
+# --- add warns on similar titles (T-3bryhm) ----------------------------------
+
+def test_add_warns_on_similar_titles_without_refusing(repo):
+    old = repo.add_task("Batch git subprocess calls in validate")
+    d = repo.j("add", "Batch git subprocess calls in validate")  # exact dupe
+    new = d["data"]["id"]
+    assert d["ok"] and repo.task_file(new).exists()
+    sim = [e for e in d["errors"] if e["code"] == "similar-task"]
+    assert len(sim) == 1 and sim[0]["task"] == new
+    assert sim[0]["severity"] == "warning"
+    assert old in sim[0]["message"] and "(todo)" in sim[0]["message"]
+    assert f"ledger drop {new} --duplicate-of {old}" in sim[0]["fix_hint"]
+    assert d["data"]["similar"] == [{
+        "id": old, "status": "todo",
+        "title": "Batch git subprocess calls in validate", "score": 1.0}]
+    # near duplicate names the older id; unrelated and stopword-only do not
+    d = repo.j("add", "Batch the git subprocess calls that validate spawns")
+    assert any(e["code"] == "similar-task" and old in e["message"]
+               for e in d["errors"])
+    assert repo.j("add", "Rename the config loader")["errors"] == []
+    repo.add_task("Fix the thing")
+    assert repo.j("add", "Add the thing")["errors"] == []
+    repo.add_task("Add it")
+    fixed = repo.add_task("Fix it")
+    repo.j("done", fixed, "--no-code", "x")
+    d = repo.j("add", "Fix it")  # empty token sets are never candidates
+    assert d["ok"] and d["errors"] == []
+    # nothing is persisted and validate never sees it
+    assert "similar" not in repo.read(new)
+    assert repo.j("validate", "--no-git", "--strict")["ok"]
+
+
+def test_add_matches_closed_tasks_only_on_identical_titles(repo):
+    old = repo.add_task("Migrate the parser to a state machine")
+    repo.j("done", old, "--no-code", "shipped")
+    d = repo.j("add", "Migrate the parser to a state machine")
+    sim = [e for e in d["errors"] if e["code"] == "similar-task"]
+    assert len(sim) == 1 and "closed on" in sim[0]["fix_hint"]
+    assert "regression or redo" in sim[0]["fix_hint"]
+    assert repo.j("add", "Migrate the parser to a recursive descent")[
+        "errors"] == []  # loosely similar closed title: noise, not a hint
+
+
+def test_add_similarity_is_capped_and_best_first(repo):
+    exact = repo.add_task("Parser rewrite phase")
+    for word in ("alpha", "beta", "gamma", "delta", "epsilon", "zeta"):
+        repo.add_task(f"Parser rewrite {word}")  # overlap 2/3 each
+    d = repo.j("add", "Parser rewrite phase")
+    sim = d["data"]["similar"]
+    assert len(sim) == 5
+    assert sim[0]["id"] == exact and sim[0]["score"] == 1.0
+    assert all(s["score"] < 1.0 for s in sim[1:])
+
+
+def test_scan_reports_similar_open_pairs(repo):
+    a = repo.add_task("Retry with backoff for the sync client")
+    b = repo.add_task("Sync client retry backoff")
+    repo.add_task("Unrelated docs cleanup")
+    d = repo.j("scan")["data"]
+    assert d["similar_open_pairs"] == [{"a": a, "b": b, "score": 1.0}]
+    repo.j("drop", b, "--duplicate-of", a)
+    assert repo.j("scan")["data"]["similar_open_pairs"] == []
+
+
+def test_title_tokens(ledger_mod):
+    assert ledger_mod.title_tokens(
+        "Add: retry-with backoff for the sync client!") == {
+        "retry", "backoff", "sync", "client"}
+    assert ledger_mod.title_tokens("Fix it") == set()
+    assert ledger_mod.title_tokens("Task 1234") == {"task", "1234"}

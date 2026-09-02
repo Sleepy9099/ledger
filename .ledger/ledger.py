@@ -1146,6 +1146,73 @@ def claim_is_stale(task: Task, stale_days: int) -> bool:
     return datetime.now(timezone.utc) - dt > timedelta(days=stale_days)
 
 
+# ---------------------------------------------------------------------------
+# Title similarity (advisory: `add` warns, never refuses; never in validate)
+# ---------------------------------------------------------------------------
+
+TITLE_STOPWORDS = frozenset(
+    "the and for with from into when that this add fix use make support "
+    "handle".split())
+SIMILAR_MIN_SHARED = 2      # shared tokens needed before a pair is a candidate
+SIMILAR_MIN_OVERLAP = 0.6   # |A∩B| / min(|A|,|B|)
+SIMILAR_CAP = 5
+
+
+def title_tokens(title: str) -> set[str]:
+    """Deterministic token set for title comparison: lowercase, split on
+    non-alphanumerics, drop tokens shorter than 3 chars and stopwords."""
+    return {tok for tok in re.split(r"[^a-z0-9]+", title.lower())
+            if len(tok) >= 3 and tok not in TITLE_STOPWORDS}
+
+
+def title_similarity(a: set[str], b: set[str], closed: bool) -> float | None:
+    """Score in (0, 1] when the pair is a duplicate candidate, else None.
+    An empty side is never a candidate (also guards the division). A CLOSED
+    task only matches on an identical token set — re-filing finished or
+    dropped work is the classic duplicate; loose matches on history would
+    be noise. No raw-string containment: it has no word boundaries."""
+    if not a or not b:
+        return None
+    if closed:
+        return 1.0 if a == b else None
+    shared = a & b
+    if len(shared) < SIMILAR_MIN_SHARED:
+        return None
+    overlap = len(shared) / min(len(a), len(b))
+    return overlap if overlap >= SIMILAR_MIN_OVERLAP else None
+
+
+def similar_tasks(title: str, tasks: list, exclude: str | None = None
+                  ) -> list[tuple[Task, float]]:
+    mine = title_tokens(title)
+    out = []
+    for t in tasks:
+        if t.id == exclude:
+            continue
+        score = title_similarity(mine, title_tokens(t.title),
+                                 closed=t.status in ("done", "dropped"))
+        if score is not None:
+            out.append((t, score))
+    out.sort(key=lambda x: (-x[1], sort_key(x[0])))
+    return out[:SIMILAR_CAP]
+
+
+def _similar_task_warning(new_id: str, old: Task, score: float) -> dict:
+    if old.status in ("done", "dropped"):
+        hint = (f"{old.id} closed on {(old.header.get('closed') or '?')[:10]}; "
+                f"if this is a regression or redo, keep {new_id} and "
+                f"ledger note {new_id} 'follows {old.id}'; if you re-filed "
+                f"finished work, ledger drop {new_id} --duplicate-of {old.id}")
+    else:
+        hint = (f"if it is the same work: ledger drop {new_id} --duplicate-of "
+                f"{old.id} and carry any new evidence into {old.id} with "
+                "ledger note/step; otherwise ignore")
+    return err("similar-task",
+               f"{new_id} looks similar to {old.id} ({old.status}) "
+               f"'{old.title}'", task=new_id, severity="warning",
+               fix_hint=hint)
+
+
 def _dep_status_text(dep: str, by_id: dict[str, Task]) -> str:
     """`T-x (todo)`; a dropped dependency also names where its work went:
     `T-x (dropped, duplicate-of T-y)` so the re-point is one read away."""
@@ -1393,8 +1460,17 @@ def cmd_add(args) -> int:
     task.append_log(ctx.actor, "add", f"created: {task.title}")
     task.path = task_path(ctx, task.id)
     save_task(task)
-    emit(args, True, {"id": task.id, "path": str(task.path)},
-         human=[f"added {task.id}: {task.title}"])
+    # duplicates are cheapest to catch at filing time, and `add` is the one
+    # command an agent cannot skip: warn (never refuse — a refusal makes
+    # --force reflexive), persist nothing, never in validate
+    similar = similar_tasks(title, tasks)
+    warnings = [_similar_task_warning(task.id, old, score)
+                for old, score in similar]
+    emit(args, True,
+         {"id": task.id, "path": str(task.path),
+          "similar": [{"id": old.id, "status": old.status, "title": old.title,
+                       "score": round(score, 3)} for old, score in similar]},
+         errors=warnings, human=[f"added {task.id}: {task.title}"])
     return 0
 
 
@@ -1942,12 +2018,31 @@ def cmd_scan(args) -> int:
     if args.write:
         backfilled = _backfill_from_trailers(
             ctx, tasks, commits, skip_ids=structural_problem_stems(problems))
+    # post-merge duplicate check: concurrent branches are exactly where
+    # cross-branch duplicates are minted, and scan is the non-gating ritual
+    # command that already walks the corpus (a fuzzy score never fails CI)
+    open_tasks = sorted((t for t in tasks if t.status in OPEN_STATUSES),
+                        key=sort_key)
+    tokens = {t.id: title_tokens(t.title) for t in open_tasks}
+    similar_pairs = []
+    for i, a in enumerate(open_tasks):
+        for b in open_tasks[i + 1:]:
+            score = title_similarity(tokens[a.id], tokens[b.id], closed=False)
+            if score is not None:
+                similar_pairs.append({"a": a.id, "b": b.id,
+                                      "score": round(score, 3)})
+    similar_pairs.sort(key=lambda x: -x["score"])
     data = {"linked": linked, "exempt": exempt, "unlinked": unlinked,
             "dangling": dangling, "backfilled": backfilled,
-            "commits_scanned": len(commits)}
+            "commits_scanned": len(commits),
+            "similar_open_pairs": similar_pairs[:20]}
     human = [f"scanned {len(commits)} commit(s): {len(linked)} linked, "
              f"{len(exempt)} exempt, {len(unlinked)} unlinked, "
              f"{len(dangling)} dangling"]
+    for s in similar_pairs[:20]:
+        human.append(f"  similar open titles: {s['a']} ~ {s['b']} "
+                     f"({s['score']}) — ledger drop <dup> --duplicate-of "
+                     "<survivor> if they are the same work")
     for u in unlinked:
         human.append(f"  unlinked {u['sha']}: {u['subject']}")
     for d in dangling:

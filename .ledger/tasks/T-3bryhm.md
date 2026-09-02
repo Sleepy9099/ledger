@@ -1,10 +1,12 @@
 ---
 id: T-3bryhm
 title: add: non-blocking warning on similar existing task titles
-status: todo
+status: in_progress
 priority: p2
 size: s
 created: 2026-09-01T23:48:39Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T01:31:04Z
 tags: discovery
 ---
 
@@ -44,9 +46,9 @@ Output is additive; files are byte-identical to what older copies would write; o
 
 ## Next Steps
 
-- [ ] title_tokens helper + TITLE_STOPWORDS constant with unit test
-- [ ] Candidate scoring in cmd_add; similar-task warnings (CLI-only code) + data.similar
-- [ ] DESIGN §5 bullet and §11 'semantic/LLM-based deduplication' entry; tests incl. the validate-strict boundary
+- [x] title_tokens helper + TITLE_STOPWORDS constant with unit test
+- [x] Candidate scoring in cmd_add; similar-task warnings (CLI-only code) + data.similar
+- [x] DESIGN §5 bullet and §11 'semantic/LLM-based deduplication' entry; tests incl. the validate-strict boundary
 
 ## Open Questions
 
@@ -59,3 +61,8 @@ Output is additive; files are byte-identical to what older copies would write; o
 - 2026-09-01T23:48:42Z [claude-2026-09-01-a] step: added 'Candidate scoring in cmd_add; similar-task warnings (CLI-only code) + data.similar'
 - 2026-09-01T23:48:42Z [claude-2026-09-01-a] step: added 'DESIGN §5 bullet and §11 'semantic/LLM-based deduplication' entry; tests incl. the validate-strict boundary'
 - 2026-09-02T00:06:24Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: suite uses title 'A' not 'Fix it'; evaluate `scan` (non-gating post-merge ritual) as the advisory home for cross-branch duplicate detection
+- 2026-09-02T01:31:04Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T01:36:36Z [claude-2026-09-01-b] step: checked 'title_tokens helper + TITLE_STOPWORDS constant with unit test'
+- 2026-09-02T01:36:37Z [claude-2026-09-01-b] step: checked 'Candidate scoring in cmd_add; similar-task warnings (CLI-only code) + data.similar'
+- 2026-09-02T01:36:37Z [claude-2026-09-01-b] step: checked 'DESIGN §5 bullet and §11 'semantic/LLM-based deduplication' entry; tests incl. the validate-strict boundary'
+- 2026-09-02T01:36:37Z [claude-2026-09-01-b] note: scan evaluated and adopted as the advisory cross-branch home: scan --json now reports similar_open_pairs (same scoring, open tasks only, capped at 20) so the post-merge ritual surfaces duplicates minted on concurrent branches; never in validate

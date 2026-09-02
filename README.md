@@ -77,7 +77,8 @@ python .ledger/ledger.py <command> [--json]
 next --claim      the agent entry point: highest-priority eligible task,
                   claimed; explains WHY if nothing is eligible
 add "title" -p p1 -s m --spec -      create a task (spec via stdin);
-    [--after <id>] [--tag t]         --after = scheduler-visible dependency
+    [--after <id>] [--tag t]         --after = scheduler-visible dependency;
+                                     warns (never refuses) on similar titles
 show <id> | list [--status ...]      read state (any unique id fragment works)
 set <id> --priority|--size|--title   edit header fields; --add-depends /
     |--add-depends|--remove-depends  --remove-depends keep the DAG honest

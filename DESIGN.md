@@ -219,6 +219,13 @@ Notable semantics:
   (a dropped dependency counts as open — one reading of depends_on
   tool-wide, shared with `next` and `drop`).
 - `set --add-depends` refuses self-references and cycles at write time.
+- `add` warns, never refuses, when the new title is token-overlap-similar
+  to an existing one (`similar-task`, warning tier in the command envelope;
+  an open task needs ≥2 shared tokens and ≥60% overlap of the smaller set,
+  a closed task only an identical token set). Advisory only: nothing is
+  persisted, the code is CLI-only (never in `validate` — a fuzzy score must
+  never fail CI), thresholds are code constants. `scan` reports similar
+  OPEN pairs post-merge, where concurrent branches mint duplicates.
 - `drop --duplicate-of <id>` / `--superseded-by <id>` close a task while
   naming its survivor: the relation is one Log line (§2), never a header
   field, and the reverse view (`show <survivor>` → `absorbed`) is derived on
@@ -409,7 +416,9 @@ epics/sprints/due-dates/velocity (PM features that rot and invite gaming),
 evidence-token vocabularies (commits carry their tests), an `updated` field,
 inferred commit linkage (fabricated evidence), YAML/TOML parsing (dependency
 or 3.11+ / write-less; the strict subset is ~50 lines and merges better), and
-spec-editing CLI commands (agents edit prose better with their own tools).
+spec-editing CLI commands (agents edit prose better with their own tools),
+and semantic / LLM-based deduplication (the add-time warning is a
+deterministic token-overlap hint; a model's opinion must never gate CI).
 
 ---
 
