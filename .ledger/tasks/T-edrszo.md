@@ -1,12 +1,11 @@
 ---
 id: T-edrszo
 title: Docs and test drift from the 2026-09-02 sweep
-status: in_progress
+status: done
 priority: p3
 size: xs
 created: 2026-09-02T11:44:59Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T12:29:00Z
+closed: 2026-09-02T12:30:29Z
 tags: docs
 ---
 
@@ -22,7 +21,11 @@ DESIGN §5 says brief's dead ends are "uncapped" (they are capped at 10 — the 
 
 ## Commits
 
+- 8e4fb18 2026-09-02 Docs and test drift from the 2026-09-02 sweep
+
 ## Log
 
 - 2026-09-02T11:44:59Z [claude-2026-09-01-b] add: created: Docs and test drift from the 2026-09-02 sweep [p3/xs] (tags: docs)
 - 2026-09-02T12:29:00Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T12:30:29Z [claude-2026-09-01-b] link: 8e4fb18 Docs and test drift from the 2026-09-02 sweep
+- 2026-09-02T12:30:29Z [claude-2026-09-01-b] done: evidence: 8e4fb18
