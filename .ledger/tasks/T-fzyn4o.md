@@ -1,11 +1,10 @@
 ---
 id: T-fzyn4o
 title: Decide: next --claim returns the digest shape by default
-status: blocked
+status: todo
 priority: p3
 size: xs
 created: 2026-09-01T23:48:40Z
-blocked_on: human
 depends_on: T-z7iebd, T-2e587s
 tags: ergonomics, context, decision
 ---
@@ -35,7 +34,7 @@ Default payload has the digest keys and no `log`; `--full` has the `task_full` k
 
 ## Open Questions
 
-- [ ] HUMAN: After `brief` lands, should `next` return `data.task` in the digest shape by default with `--full` restoring today's payload (removes the double-load at every session start; the tool's own tests read only header/why/claimed/blocked_on_human), or keep `task_full` as the default and rely on the opt-in `--brief` (zero contract risk for host scripts that parse data.task.log)? A data-dependent shape (switch only above a Log-length threshold) is rejected either way.
+- [x] HUMAN: After `brief` lands, should `next` return `data.task` in the digest shape by default with `--full` restoring today's payload (removes the double-load at every session start; the tool's own tests read only header/why/claimed/blocked_on_human), or keep `task_full` as the default and rely on the opt-in `--brief` (zero contract risk for host scripts that parse data.task.log)? A data-dependent shape (switch only above a Log-length threshold) is rejected either way. -- ANSWERED (2026-09-02): Digest shape by default, --full restores task_full. Operator criteria: context-friendliness of the one mandatory command wins; the protocol already requires reading the task file, so the full Log entered context twice. Host scripts that parse data.task.log switch to --full or show; PROTOCOL_VERSION bumps in the same commit.
 
 ## Commits
 
@@ -49,3 +48,5 @@ Default payload has the digest keys and no `log`; `--full` has the `task_full` k
 - 2026-09-01T23:48:49Z [claude-2026-09-01-a] set: depends_on + -> T-2e587s
 - 2026-09-01T23:48:49Z [claude-2026-09-01-a] block: on human — decision recorded in Open Questions; do not implement until answered
 - 2026-09-02T00:06:25Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: payload description aligned with T-z7iebd's digest keys (no next_steps key; open_questions is a count in the digest)
+- 2026-09-02T00:54:57Z [claude-2026-09-01-b] answer: 'HUMAN: After `brief` lands, should `next` return `data.task` in the digest shape by default with `--full` restoring today's payload (removes the double-load at every session start; the tool's own tests read only header/why/claimed/blocked_on_human), or keep `task_full` as the default and rely on the opt-in `--brief` (zero contract risk for host scripts that parse data.task.log)? A data-dependent shape (switch only above a Log-length threshold) is rejected either way.' -> Digest shape by default, --full restores task_full. Operator criteria: context-friendliness of the one mandatory command wins; the protocol already requires reading the task file, so the full Log entered context twice. Host scripts that parse data.task.log switch to --full or show; PROTOCOL_VERSION bumps in the same commit.
+- 2026-09-02T00:54:58Z [claude-2026-09-01-b] unblock: -> todo

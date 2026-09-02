@@ -1,11 +1,10 @@
 ---
 id: T-6kyk2x
 title: Advisory resource leases derived from claims (measure first)
-status: blocked
+status: todo
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
-blocked_on: human
 tags: concurrency, orchestration
 ---
 
@@ -55,7 +54,7 @@ tests/test_cli.py: `next` skips a resource-held task and its `why` names the hol
 
 ## Open Questions
 
-- [ ] HUMAN: Resource leases: (1) representation — A) a `resource:<slug>` tag convention that next/claim/validate interpret (zero header-schema change; every vendored copy validates clean; recommended) or B) a new `resources:` header key (cleaner JSON and typo detection, but every repo must upgrade its vendored ledger.py first: older copies emit unknown-key, promoted to error by --strict CI, and hide the key from --json)? (2) timing — keep this filed at p3 gated on measured contention (recommended; the review's own rule) or drop until a wave records waits? (3) the `resource-contention` validate code: `info` (never promoted, like exempt-ratio) or `warning` (then --strict CI fails on any double-hold, including sanctioned `--force` ones, until a holder releases)?
+- [x] HUMAN: Resource leases: (1) representation — A) a `resource:<slug>` tag convention that next/claim/validate interpret (zero header-schema change; every vendored copy validates clean; recommended) or B) a new `resources:` header key (cleaner JSON and typo detection, but every repo must upgrade its vendored ledger.py first: older copies emit unknown-key, promoted to error by --strict CI, and hide the key from --json)? (2) timing — keep this filed at p3 gated on measured contention (recommended; the review's own rule) or drop until a wave records waits? (3) the `resource-contention` validate code: `info` (never promoted, like exempt-ratio) or `warning` (then --strict CI fails on any double-hold, including sanctioned `--force` ones, until a holder releases)? -- ANSWERED (2026-09-02): (1) A — resource:<slug> tag convention, no header key, so every vendored copy validates clean. (2) Implement Phase 1 now: the operator's orchestrator-visibility criterion supersedes the measure-first gate (the gate stays documented as the reason the feature is advisory). (3) resource-contention at info tier — never promoted, so a sanctioned --force double-hold cannot fail strict CI; the orchestrator reads it in the post-merge ritual.
 
 ## Commits
 
@@ -67,3 +66,5 @@ tests/test_cli.py: `next` skips a resource-held task and its `why` names the hol
 - 2026-09-01T23:48:46Z [claude-2026-09-01-a] step: added 'DESIGN §2 tags row, §5 eligibility, §7(h); README; tests incl. the concurrency race'
 - 2026-09-01T23:48:46Z [claude-2026-09-01-a] question: added (HUMAN): Resource leases: (1) representation — A) a `resource:<slug>` tag convention that next/claim/validate interpret (zero header-schema change; every vendored copy validates clean; recommended) or B) a new `resources:` header key (cleaner JSON and typo detection, but every repo must upgrade its vendored ledger.py first: older copies emit unknown-key, promoted to error by --strict CI, and hide the key from --json)? (2) timing — keep this filed at p3 gated on measured contention (recommended; the review's own rule) or drop until a wave records waits? (3) the `resource-contention` validate code: `info` (never promoted, like exempt-ratio) or `warning` (then --strict CI fails on any double-hold, including sanctioned `--force` ones, until a holder releases)?
 - 2026-09-01T23:48:46Z [claude-2026-09-01-a] block: on human — decision recorded in Open Questions; do not implement until answered
+- 2026-09-02T00:54:57Z [claude-2026-09-01-b] answer: 'HUMAN: Resource leases: (1) representation — A) a `resource:<slug>` tag convention that next/claim/validate interpret (zero header-schema change; every vendored copy validates clean; recommended) or B) a new `resources:` header key (cleaner JSON and typo detection, but every repo must upgrade its vendored ledger.py first: older copies emit unknown-key, promoted to error by --strict CI, and hide the key from --json)? (2) timing — keep this filed at p3 gated on measured contention (recommended; the review's own rule) or drop until a wave records waits? (3) the `resource-contention` validate code: `info` (never promoted, like exempt-ratio) or `warning` (then --strict CI fails on any double-hold, including sanctioned `--force` ones, until a holder releases)?' -> (1) A — resource:<slug> tag convention, no header key, so every vendored copy validates clean. (2) Implement Phase 1 now: the operator's orchestrator-visibility criterion supersedes the measure-first gate (the gate stays documented as the reason the feature is advisory). (3) resource-contention at info tier — never promoted, so a sanctioned --force double-hold cannot fail strict CI; the orchestrator reads it in the post-merge ritual.
+- 2026-09-02T00:54:57Z [claude-2026-09-01-b] unblock: -> todo

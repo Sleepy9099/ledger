@@ -1,11 +1,10 @@
 ---
 id: T-00mrm7
 title: ledger report: derived read-only wave and backlog metrics
-status: blocked
+status: todo
 priority: p3
 size: m
 created: 2026-09-01T23:48:40Z
-blocked_on: human
 depends_on: T-71aehi, T-9iu47b, T-w0emnj
 tags: metrics, orchestration
 ---
@@ -44,7 +43,7 @@ tests/test_cli.py: a small ledger exercising every counter (three priorities, a 
 
 ## Open Questions
 
-- [ ] HUMAN: DESIGN §11 cut sprint/velocity features because they rot AND invite gaming. A derived, never-stored `ledger report` answers rot but not gaming (per-actor counters and duration percentiles are optimizable by the agents that write the Log). Ship as specified (recommended — kept out of PROTOCOL_TEXT, never feeds next/done/validate, documented as operator diagnostics), ship without the per-actor block, or defer until a second wave shows the 3-command composition being scripted by hand?
+- [x] HUMAN: DESIGN §11 cut sprint/velocity features because they rot AND invite gaming. A derived, never-stored `ledger report` answers rot but not gaming (per-actor counters and duration percentiles are optimizable by the agents that write the Log). Ship as specified (recommended — kept out of PROTOCOL_TEXT, never feeds next/done/validate, documented as operator diagnostics), ship without the per-actor block, or defer until a second wave shows the 3-command composition being scripted by hand? -- ANSWERED (2026-09-02): Ship as specified, including the per-actor block. Operator criteria 2026-09-01 add 'what allows an orchestrator to accurately track what sub agents are doing and course correct' — a derived, never-stored report is exactly that view; it stays out of PROTOCOL_TEXT and never feeds next/done/validate, so gaming has no lever. The 'second wave' trigger is superseded by the operator's stated priority.
 
 ## Commits
 
@@ -60,3 +59,5 @@ tests/test_cli.py: a small ledger exercising every counter (three priorities, a 
 - 2026-09-02T00:06:23Z [claude-2026-09-01-a] set: depends_on + -> T-9iu47b
 - 2026-09-02T00:06:23Z [claude-2026-09-01-a] set: depends_on + -> T-w0emnj
 - 2026-09-02T00:06:24Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: depends_on T-71aehi/T-9iu47b/T-w0emnj (consumes their Log formats); tag join-time wording fixed; id regex must be unanchored (ctx.id_pattern is ^$-anchored); §25 families out of scope named; per-wave tag population
+- 2026-09-02T00:54:56Z [claude-2026-09-01-b] answer: 'HUMAN: DESIGN §11 cut sprint/velocity features because they rot AND invite gaming. A derived, never-stored `ledger report` answers rot but not gaming (per-actor counters and duration percentiles are optimizable by the agents that write the Log). Ship as specified (recommended — kept out of PROTOCOL_TEXT, never feeds next/done/validate, documented as operator diagnostics), ship without the per-actor block, or defer until a second wave shows the 3-command composition being scripted by hand?' -> Ship as specified, including the per-actor block. Operator criteria 2026-09-01 add 'what allows an orchestrator to accurately track what sub agents are doing and course correct' — a derived, never-stored report is exactly that view; it stays out of PROTOCOL_TEXT and never feeds next/done/validate, so gaming has no lever. The 'second wave' trigger is superseded by the operator's stated priority.
+- 2026-09-02T00:54:57Z [claude-2026-09-01-b] unblock: -> todo

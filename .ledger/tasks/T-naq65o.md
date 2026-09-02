@@ -1,11 +1,10 @@
 ---
 id: T-naq65o
 title: done: warn when depends_on still lists open tasks
-status: blocked
+status: todo
 priority: p2
 size: xs
 created: 2026-09-01T23:48:39Z
-blocked_on: human
 tags: orchestration, coherence
 ---
 
@@ -43,7 +42,7 @@ W --after A --after B --after C; claim A; drop C; `done W --no-code "x"` → exa
 
 ## Open Questions
 
-- [ ] HUMAN: When `done` closes a task whose depends_on still names open tasks: (a) emit a `done-loose-ends` warning naming them and still close (recommended — mirrors the unchecked-steps warning, exit code unchanged, zero CI impact), (b) refuse with exit 2 unless --force (changes `done` semantics tool-wide: PROTOCOL_TEXT, DESIGN §5, README, --force help, decision record), or (c) stay silent? And should a still-listed DROPPED dependency warn (ALIGN with next/drop, which treat a dropped dep as unmet and ask for --remove-depends — recommended) or count as satisfied (then DESIGN §8 must state the two readings)?
+- [x] HUMAN: When `done` closes a task whose depends_on still names open tasks: (a) emit a `done-loose-ends` warning naming them and still close (recommended — mirrors the unchecked-steps warning, exit code unchanged, zero CI impact), (b) refuse with exit 2 unless --force (changes `done` semantics tool-wide: PROTOCOL_TEXT, DESIGN §5, README, --force help, decision record), or (c) stay silent? And should a still-listed DROPPED dependency warn (ALIGN with next/drop, which treat a dropped dep as unmet and ask for --remove-depends — recommended) or count as satisfied (then DESIGN §8 must state the two readings)? -- ANSWERED (2026-09-02): (a) emit a done-loose-ends warning naming the still-open dependencies and close anyway; a still-listed DROPPED dependency counts as unmet (align with next and drop). Operator criteria: warnings never block autonomy, and one reading of depends_on tool-wide is easier to maintain than two.
 
 ## Commits
 
@@ -55,3 +54,5 @@ W --after A --after B --after C; claim A; drop C; `done W --no-code "x"` → exa
 - 2026-09-01T23:48:43Z [claude-2026-09-01-a] step: added 'DESIGN §5 done bullet and §6 note; self-contained test in tests/test_cli.py'
 - 2026-09-01T23:48:43Z [claude-2026-09-01-a] question: added (HUMAN): When `done` closes a task whose depends_on still names open tasks: (a) emit a `done-loose-ends` warning naming them and still close (recommended — mirrors the unchecked-steps warning, exit code unchanged, zero CI impact), (b) refuse with exit 2 unless --force (changes `done` semantics tool-wide: PROTOCOL_TEXT, DESIGN §5, README, --force help, decision record), or (c) stay silent? And should a still-listed DROPPED dependency warn (ALIGN with next/drop, which treat a dropped dep as unmet and ask for --remove-depends — recommended) or count as satisfied (then DESIGN §8 must state the two readings)?
 - 2026-09-01T23:48:43Z [claude-2026-09-01-a] block: on human — decision recorded in Open Questions; do not implement until answered
+- 2026-09-02T00:54:55Z [claude-2026-09-01-b] answer: 'HUMAN: When `done` closes a task whose depends_on still names open tasks: (a) emit a `done-loose-ends` warning naming them and still close (recommended — mirrors the unchecked-steps warning, exit code unchanged, zero CI impact), (b) refuse with exit 2 unless --force (changes `done` semantics tool-wide: PROTOCOL_TEXT, DESIGN §5, README, --force help, decision record), or (c) stay silent? And should a still-listed DROPPED dependency warn (ALIGN with next/drop, which treat a dropped dep as unmet and ask for --remove-depends — recommended) or count as satisfied (then DESIGN §8 must state the two readings)?' -> (a) emit a done-loose-ends warning naming the still-open dependencies and close anyway; a still-listed DROPPED dependency counts as unmet (align with next and drop). Operator criteria: warnings never block autonomy, and one reading of depends_on tool-wide is easier to maintain than two.
+- 2026-09-02T00:54:56Z [claude-2026-09-01-b] unblock: -> todo

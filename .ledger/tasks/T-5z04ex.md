@@ -1,11 +1,10 @@
 ---
 id: T-5z04ex
 title: Coverage repair: ledger link cannot fix a pushed untrailered commit
-status: blocked
+status: todo
 priority: p1
 size: s
 created: 2026-09-01T23:48:39Z
-blocked_on: human
 tags: integrity, protocol
 ---
 
@@ -50,7 +49,7 @@ Recommendation: (b). Under (a) the only ways to green CI after a forgotten trail
 
 ## Open Questions
 
-- [ ] HUMAN: Pushed commit without a trailer: (a) keep DESIGN §4 (coverage from trailers only) and make the fix_hint/protocol say the commit stays flagged unless exempt/baseline is moved by the operator, or (b) let an explicit `ledger link` (sha-verified, actor-tagged, tamper-protected `link:` Log line + ## Commits line) count as coverage for that sha? Recommendation: (b) — (a) leaves only a lying exemption or a hidden baseline move as repairs.
+- [x] HUMAN: Pushed commit without a trailer: (a) keep DESIGN §4 (coverage from trailers only) and make the fix_hint/protocol say the commit stays flagged unless exempt/baseline is moved by the operator, or (b) let an explicit `ledger link` (sha-verified, actor-tagged, tamper-protected `link:` Log line + ## Commits line) count as coverage for that sha? Recommendation: (b) — (a) leaves only a lying exemption or a hidden baseline move as repairs. -- ANSWERED (2026-09-02): (b) an explicit ledger link counts as coverage. Operator criteria 2026-09-01: agents need a truthful repair for a pushed untrailered commit; (a) leaves only a lying exemption or a hidden baseline move, which strands an autonomous agent in unrepairable strict CI. The link line is sha-verified, actor-tagged and tamper-protected, so it is an explicit claim, not inferred linkage.
 
 ## Commits
 
@@ -64,3 +63,5 @@ Recommendation: (b). Under (a) the only ways to green CI after a forgotten trail
 - 2026-09-01T23:48:41Z [claude-2026-09-01-a] question: added (HUMAN): Pushed commit without a trailer: (a) keep DESIGN §4 (coverage from trailers only) and make the fix_hint/protocol say the commit stays flagged unless exempt/baseline is moved by the operator, or (b) let an explicit `ledger link` (sha-verified, actor-tagged, tamper-protected `link:` Log line + ## Commits line) count as coverage for that sha? Recommendation: (b) — (a) leaves only a lying exemption or a hidden baseline move as repairs.
 - 2026-09-01T23:48:41Z [claude-2026-09-01-a] block: on human — decision recorded in Open Questions; do not implement until answered
 - 2026-09-02T00:33:21Z [claude-2026-09-01-b] note: Session claude-2026-09-01-b found an uncommitted partial rewrite of the coverage/trailer-dangling fix_hints (option-a wording) in ledger.py; discarded it uncommitted because the (a)/(b) decision is still open — the Spec's Design section already carries everything needed to implement either answer
+- 2026-09-02T00:54:55Z [claude-2026-09-01-b] answer: 'HUMAN: Pushed commit without a trailer: (a) keep DESIGN §4 (coverage from trailers only) and make the fix_hint/protocol say the commit stays flagged unless exempt/baseline is moved by the operator, or (b) let an explicit `ledger link` (sha-verified, actor-tagged, tamper-protected `link:` Log line + ## Commits line) count as coverage for that sha? Recommendation: (b) — (a) leaves only a lying exemption or a hidden baseline move as repairs.' -> (b) an explicit ledger link counts as coverage. Operator criteria 2026-09-01: agents need a truthful repair for a pushed untrailered commit; (a) leaves only a lying exemption or a hidden baseline move, which strands an autonomous agent in unrepairable strict CI. The link line is sha-verified, actor-tagged and tamper-protected, so it is an explicit claim, not inferred linkage.
+- 2026-09-02T00:54:55Z [claude-2026-09-01-b] unblock: -> todo

@@ -1,11 +1,10 @@
 ---
 id: T-yfvuya
 title: note --dead-end: machine-selectable negative-knowledge marker
-status: blocked
+status: todo
 priority: p2
 size: xs
 created: 2026-09-01T23:48:39Z
-blocked_on: human
 tags: memory
 ---
 
@@ -46,7 +45,7 @@ Older copies parse, round-trip and tamper-protect the line; they reject only the
 
 ## Open Questions
 
-- [ ] HUMAN: Negative-knowledge marker form: (A) `ledger note <id> "..." --dead-end` writes verb `note(dead-end)` mirroring `done(no-code)` — recommended: LOG_LINE_RE already admits it, no validator has a verb whitelist, log-tamper covers it, and the flag guarantees canonical spelling; it extends the DESIGN §2 verb list, which is why this is asked. (B) keep verb `note` and a `DEAD-END:` text prefix mirroring the `HUMAN:` marker — zero vocabulary change but a convention agents can misspell. (C) no marker — the brief view shows recent notes only.
+- [x] HUMAN: Negative-knowledge marker form: (A) `ledger note <id> "..." --dead-end` writes verb `note(dead-end)` mirroring `done(no-code)` — recommended: LOG_LINE_RE already admits it, no validator has a verb whitelist, log-tamper covers it, and the flag guarantees canonical spelling; it extends the DESIGN §2 verb list, which is why this is asked. (B) keep verb `note` and a `DEAD-END:` text prefix mirroring the `HUMAN:` marker — zero vocabulary change but a convention agents can misspell. (C) no marker — the brief view shows recent notes only. -- ANSWERED (2026-09-02): (A) note --dead-end writes verb note(dead-end). Operator criteria: machine-selectable so brief/next can surface negative knowledge without agents re-reading history; the flag guarantees canonical spelling for multiple agents; zero validate impact.
 
 ## Commits
 
@@ -60,3 +59,5 @@ Older copies parse, round-trip and tamper-protect the line; they reject only the
 - 2026-09-01T23:48:44Z [claude-2026-09-01-a] question: added (HUMAN): Negative-knowledge marker form: (A) `ledger note <id> "..." --dead-end` writes verb `note(dead-end)` mirroring `done(no-code)` — recommended: LOG_LINE_RE already admits it, no validator has a verb whitelist, log-tamper covers it, and the flag guarantees canonical spelling; it extends the DESIGN §2 verb list, which is why this is asked. (B) keep verb `note` and a `DEAD-END:` text prefix mirroring the `HUMAN:` marker — zero vocabulary change but a convention agents can misspell. (C) no marker — the brief view shows recent notes only.
 - 2026-09-01T23:48:45Z [claude-2026-09-01-a] block: on human — decision recorded in Open Questions; do not implement until answered
 - 2026-09-02T00:06:24Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: the 'dead ends especially' sentence lives in a bullet T-w0emnj replaces; doc step now targets the ontology block when T-w0emnj has landed
+- 2026-09-02T00:54:56Z [claude-2026-09-01-b] answer: 'HUMAN: Negative-knowledge marker form: (A) `ledger note <id> "..." --dead-end` writes verb `note(dead-end)` mirroring `done(no-code)` — recommended: LOG_LINE_RE already admits it, no validator has a verb whitelist, log-tamper covers it, and the flag guarantees canonical spelling; it extends the DESIGN §2 verb list, which is why this is asked. (B) keep verb `note` and a `DEAD-END:` text prefix mirroring the `HUMAN:` marker — zero vocabulary change but a convention agents can misspell. (C) no marker — the brief view shows recent notes only.' -> (A) note --dead-end writes verb note(dead-end). Operator criteria: machine-selectable so brief/next can surface negative knowledge without agents re-reading history; the flag guarantees canonical spelling for multiple agents; zero validate impact.
+- 2026-09-02T00:54:56Z [claude-2026-09-01-b] unblock: -> todo

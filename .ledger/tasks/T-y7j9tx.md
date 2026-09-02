@@ -1,11 +1,10 @@
 ---
 id: T-y7j9tx
 title: Decide: enforce 'committed while claimed' (linked-outside-claim)
-status: blocked
+status: todo
 priority: p3
 size: s
 created: 2026-09-01T23:48:40Z
-blocked_on: human
 tags: ownership, decision
 ---
 
@@ -30,7 +29,7 @@ T-fkywmw (write-path claim nonce — different mechanism, same defer-until-obser
 
 ## Open Questions
 
-- [ ] HUMAN: Enforce 'committed while claimed'? (A) `linked-outside-claim` from Log claim windows vs commit author dates — catches only commits landing outside every window, misses commits during a foreign fresh claim, and a squash-merge false positive on an open task has no repair unless emitted at `info` tier; (B) a `Ledger-Session:` trailer matched to the claim actor — true 'by that worker' but per-commit ceremony (decision #14) and an agent assertion (§3 trust model); (C) keep claims advisory as DESIGN §5/§7(f) rule and revisit only if a wave shows commits landing against unclaimed-but-once-claimed tasks. Recommendation: C; if evidence appears, A at info tier before B.
+- [x] HUMAN: Enforce 'committed while claimed'? (A) `linked-outside-claim` from Log claim windows vs commit author dates — catches only commits landing outside every window, misses commits during a foreign fresh claim, and a squash-merge false positive on an open task has no repair unless emitted at `info` tier; (B) a `Ledger-Session:` trailer matched to the claim actor — true 'by that worker' but per-commit ceremony (decision #14) and an agent assertion (§3 trust model); (C) keep claims advisory as DESIGN §5/§7(f) rule and revisit only if a wave shows commits landing against unclaimed-but-once-claimed tasks. Recommendation: C; if evidence appears, A at info tier before B. -- ANSWERED (2026-09-02): (C) claims stay advisory. Operator criteria: (A) false-positives on squash merges with no repair and (B) adds per-commit ceremony agents fumble; orchestrator tracking is served by the claim/release Log lines, list --mine and the report instead. Record as a DESIGN decision and close.
 
 ## Commits
 
@@ -41,3 +40,5 @@ T-fkywmw (write-path claim nonce — different mechanism, same defer-until-obser
 - 2026-09-01T23:48:48Z [claude-2026-09-01-a] step: added 'If A: implement at info tier with the interval rules below; if B: extend TRAILER_RE/_parse_trailers and the claim-actor match'
 - 2026-09-01T23:48:48Z [claude-2026-09-01-a] question: added (HUMAN): Enforce 'committed while claimed'? (A) `linked-outside-claim` from Log claim windows vs commit author dates — catches only commits landing outside every window, misses commits during a foreign fresh claim, and a squash-merge false positive on an open task has no repair unless emitted at `info` tier; (B) a `Ledger-Session:` trailer matched to the claim actor — true 'by that worker' but per-commit ceremony (decision #14) and an agent assertion (§3 trust model); (C) keep claims advisory as DESIGN §5/§7(f) rule and revisit only if a wave shows commits landing against unclaimed-but-once-claimed tasks. Recommendation: C; if evidence appears, A at info tier before B.
 - 2026-09-01T23:48:48Z [claude-2026-09-01-a] block: on human — decision recorded in Open Questions; do not implement until answered
+- 2026-09-02T00:54:59Z [claude-2026-09-01-b] answer: 'HUMAN: Enforce 'committed while claimed'? (A) `linked-outside-claim` from Log claim windows vs commit author dates — catches only commits landing outside every window, misses commits during a foreign fresh claim, and a squash-merge false positive on an open task has no repair unless emitted at `info` tier; (B) a `Ledger-Session:` trailer matched to the claim actor — true 'by that worker' but per-commit ceremony (decision #14) and an agent assertion (§3 trust model); (C) keep claims advisory as DESIGN §5/§7(f) rule and revisit only if a wave shows commits landing against unclaimed-but-once-claimed tasks. Recommendation: C; if evidence appears, A at info tier before B.' -> (C) claims stay advisory. Operator criteria: (A) false-positives on squash merges with no repair and (B) adds per-commit ceremony agents fumble; orchestrator tracking is served by the claim/release Log lines, list --mine and the report instead. Record as a DESIGN decision and close.
+- 2026-09-02T00:54:59Z [claude-2026-09-01-b] unblock: -> todo
