@@ -1,12 +1,11 @@
 ---
 id: T-1yfpil
 title: Exemption policy dry-run: scan --exempt-policy-preview counts the blast radius before the switch
-status: in_progress
+status: done
 priority: p2
 size: s
 created: 2026-09-02T08:54:44Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T09:12:55Z
+closed: 2026-09-02T09:16:32Z
 tags: integrity
 ---
 
@@ -29,7 +28,11 @@ Enabling exempt_allowed_paths is a config edit whose blast radius is only visibl
 
 ## Commits
 
+- 62fd891 2026-09-02 init reports tool_copied; linked-never-claimed names the live remedy; scan --exempt-policy-preview is the dry run before the switch
+
 ## Log
 
 - 2026-09-02T08:54:44Z [claude-2026-09-01-b] add: created: Exemption policy dry-run: scan --exempt-policy-preview counts the blast radius before the switch [p2/s] (tags: integrity)
 - 2026-09-02T09:12:55Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T09:16:32Z [claude-2026-09-01-b] link: 62fd891 init reports tool_copied; linked-never-claimed names the live remedy; scan --exempt-policy-preview is the dry run before the switch
+- 2026-09-02T09:16:32Z [claude-2026-09-01-b] done: evidence: 62fd891

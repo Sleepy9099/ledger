@@ -1,12 +1,11 @@
 ---
 id: T-otkmmt
 title: init from the vendored copy must say the tool was not copied
-status: in_progress
+status: done
 priority: p2
 size: xs
 created: 2026-09-02T08:54:44Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T09:12:54Z
+closed: 2026-09-02T09:16:31Z
 tags: distribution
 ---
 
@@ -26,7 +25,11 @@ tags: distribution
 
 ## Commits
 
+- 62fd891 2026-09-02 init reports tool_copied; linked-never-claimed names the live remedy; scan --exempt-policy-preview is the dry run before the switch
+
 ## Log
 
 - 2026-09-02T08:54:44Z [claude-2026-09-01-b] add: created: init from the vendored copy must say the tool was not copied [p2/xs] (tags: distribution)
 - 2026-09-02T09:12:54Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T09:16:31Z [claude-2026-09-01-b] link: 62fd891 init reports tool_copied; linked-never-claimed names the live remedy; scan --exempt-policy-preview is the dry run before the switch
+- 2026-09-02T09:16:31Z [claude-2026-09-01-b] done: evidence: 62fd891

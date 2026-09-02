@@ -1,12 +1,11 @@
 ---
 id: T-h65ecn
 title: linked-never-claimed fix_hint must name the remedy for the state you are in
-status: in_progress
+status: done
 priority: p2
 size: xs
 created: 2026-09-02T08:54:44Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T09:12:54Z
+closed: 2026-09-02T09:16:32Z
 tags: ergonomics
 ---
 
@@ -26,7 +25,11 @@ Hint: "the commit has landed — record the engagement now: `ledger claim <id>` 
 
 ## Commits
 
+- 62fd891 2026-09-02 init reports tool_copied; linked-never-claimed names the live remedy; scan --exempt-policy-preview is the dry run before the switch
+
 ## Log
 
 - 2026-09-02T08:54:44Z [claude-2026-09-01-b] add: created: linked-never-claimed fix_hint must name the remedy for the state you are in [p2/xs] (tags: ergonomics)
 - 2026-09-02T09:12:54Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T09:16:32Z [claude-2026-09-01-b] link: 62fd891 init reports tool_copied; linked-never-claimed names the live remedy; scan --exempt-policy-preview is the dry run before the switch
+- 2026-09-02T09:16:32Z [claude-2026-09-01-b] done: evidence: 62fd891
