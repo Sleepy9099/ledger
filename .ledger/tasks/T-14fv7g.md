@@ -1,12 +1,11 @@
 ---
 id: T-14fv7g
 title: Validate integrity bundle: closing-line vs open status, log-tamper at error tier, fail-closed shallow and tamper passes, hunk-aware diff parser
-status: in_progress
+status: done
 priority: p1
 size: s
 created: 2026-09-02T11:44:57Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T11:53:18Z
+closed: 2026-09-02T11:54:59Z
 tags: integrity
 ---
 
@@ -27,7 +26,11 @@ Tests for each.
 
 ## Commits
 
+- a9d645f 2026-09-02 Validate integrity bundle: closing line vs open status, log-tamper at error tier, fail-closed shallow and tamper passes, hunk-aware diff parsing
+
 ## Log
 
 - 2026-09-02T11:44:57Z [claude-2026-09-01-b] add: created: Validate integrity bundle: closing-line vs open status, log-tamper at error tier, fail-closed shallow and tamper passes, hunk-aware diff parser [p1/s] (tags: integrity)
 - 2026-09-02T11:53:18Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T11:54:59Z [claude-2026-09-01-b] link: a9d645f Validate integrity bundle: closing line vs open status, log-tamper at error tier, fail-closed shallow and tamper passes, hunk-aware diff parsing
+- 2026-09-02T11:54:59Z [claude-2026-09-01-b] done: evidence: a9d645f
