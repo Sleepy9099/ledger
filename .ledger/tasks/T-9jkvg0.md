@@ -26,7 +26,7 @@ Read-only scans; no header/Log/file changes; `why` is the designed near-miss cha
 
 ### Tests (tests/test_cli.py)
 
-Block a TODO task A on B (A unclaimed — `block` preserves a claim and `unblock` would restore in_progress, which is not eligible); `done B --no-code "shipped elsewhere"` (done-evidence refuses otherwise) → envelope warns for A with the unblock hint; `next --json` why for A contains "(done"; `stale_blocks` lists A; `unblock A` → eligible. Same with `drop B` (target_status dropped). Blocks on `human` / `external:` produce no entry; `test_next_reports_human_blockage` asserts `stale_blocks == []`. Claimed path: `release A --blocked --on B`, close B, `unblock A` → in_progress and A leaves `stale_blocks`. Existing `why` substring assertions keep passing; `validate --strict --no-git` output byte-identical before and after (guards the no-new-validation-code promise).
+Block a TODO task A on B (A unclaimed — `block` preserves a claim and `unblock` would restore in_progress, which is not eligible); `done B --no-code "shipped elsewhere"` (done-evidence refuses otherwise) → envelope warns for A with the unblock hint; `next --json` why for A contains "(done"; `stale_blocks` lists A; `unblock A` → eligible. Same with `drop B` (target_status dropped). Blocks on `human` / `external:` produce no entry; `test_next_reports_human_blockage` asserts `stale_blocks == []`. Claimed path: `claim A` then `block A --on B` (`block` retains the claim; `release --blocked` strips it, so it would yield todo), close B, `unblock A` → in_progress and A leaves `stale_blocks`. Existing `why` substring assertions keep passing; `validate --strict --no-git` output byte-identical before and after (guards the no-new-validation-code promise).
 
 ## Next Steps
 
@@ -44,3 +44,4 @@ Block a TODO task A on B (A unclaimed — `block` preserves a claim and `unblock
 - 2026-09-01T23:48:46Z [claude-2026-09-01-a] step: added 'compute_eligible: annotated why text + fourth return value stale_blocks; emit on both next paths'
 - 2026-09-01T23:48:46Z [claude-2026-09-01-a] step: added 'cmd_done/cmd_drop: read-only pass warning open tasks blocked on the closed id'
 - 2026-09-01T23:48:47Z [claude-2026-09-01-a] step: added 'DESIGN §5 next/done bullets (fix the 'when nothing is eligible' wording); README unblock line; tests'
+- 2026-09-02T00:06:25Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: claimed-path test must use claim + block (release --blocked strips the claim, so unblock would yield todo)

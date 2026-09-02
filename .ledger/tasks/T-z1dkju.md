@@ -5,6 +5,7 @@ status: todo
 priority: p3
 size: m
 created: 2026-09-01T23:48:40Z
+depends_on: T-w0emnj
 tags: human-decisions, ergonomics
 ---
 
@@ -19,7 +20,7 @@ Review §6: collect human-gated questions → present a compact decision set →
 1. Rows gain `priority`, `status`, `size`, `claimed_by` (may be non-null on blocked tasks), `kind: "question"`; every row keeps an integer `n`.
 2. `context`: the non-empty, non-checkbox lines of `## Open Questions` between this checkbox and the next (same line-level parse as `Task.questions()`: no fence awareness; prose before the first checkbox belongs to no row; near-miss checkbox lines land in the preceding context — validate already warns `checkbox-grammar`; exclude `#` heading lines). Opportunistic: the CLI never authors it. Either add one PROTOCOL_TEXT sentence ("put options and your recommendation on indented lines under the question so `questions --human` shows them"; regenerate via init) or state explicitly that no protocol change is made.
 3. `key`: `casefold()`, collapse whitespace, strip trailing `?.!` — a grouping HINT for consumers (rows with equal key are candidate duplicates for the operator to confirm); NOT a selector for `question resolve`, which addresses by index or raw substring (decision #21).
-4. Blocked-on-human tasks go in a sibling array `data.blocked_on_human` (the key `next` already uses), never interleaved into `questions`: `{id, title, priority, status, size, claimed_by, reason, reason_source}`. `reason` comes from the newest Log line whose verb is `block` or `release`: a `block` line `on human — <reason>` (separator space, U+2014, space) → the reason; a `release` line → its text unless it is the default `released`; otherwise `""`; NEVER fall back to an older `block` line (a stale reason after block / unblock / release-blocked). The header `blocked_on` stays the only authoritative fact.
+4. Blocked-on-human tasks go in a sibling array `data.blocked_on_human` (the key `next` already uses), never interleaved into `questions`: `{id, title, priority, status, size, claimed_by, reason, reason_source}`. `reason` comes from the newest Log line whose verb is `block` or `release`: a `block` line `on human — <reason>` (separator space, U+2014, space) → the reason; a `release` line whose text starts with `blocked on ` (the format T-w0emnj introduces) → strip `blocked on <blocked_on>` and the ` — ` separator and use the remainder (`""` when nothing follows); an older `release` line → its text unless it is the default `released`; otherwise `""`; NEVER fall back to an older `block` line (a stale reason after block / unblock / release-blocked). The header `blocked_on` stays the only authoritative fact.
 5. Ordering `sort_key`; human rendering `T-x #n [HUMAN] (p1, in_progress by claude-…): text` plus indented context lines; block rows `T-x [BLOCKED on human] (p1, blocked by …): reason`. Optional `--task <fragment>` (repeatable), resolved against the already-loaded list with load_task_or_die's exact-then-substring rule (no extra directory scan). README lines for `questions`.
 
 ### Design B — `answers apply <file|->` (mutating; one lock hold)
@@ -57,3 +58,5 @@ B: a 2-row file across two tasks → both answered, one `answer` Log line each, 
 - 2026-09-01T23:48:47Z [claude-2026-09-01-a] step: added 'answers apply: parse before lock, load once, selector rule, all-rows-resolve-before-write, cmd_done-style multi-error refusal, _answer_question extraction'
 - 2026-09-01T23:48:47Z [claude-2026-09-01-a] step: added 'README (questions fields; answers apply); DESIGN §5 command list; optional PROTOCOL_TEXT sentence on writing options under a question'
 - 2026-09-01T23:48:47Z [claude-2026-09-01-a] step: added 'Tests for both parts incl. lock-timeout and envelope entries'
+- 2026-09-02T00:06:24Z [claude-2026-09-01-a] set: depends_on + -> T-w0emnj
+- 2026-09-02T00:06:24Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: release-line reason parser must handle the `blocked on <x> — <note>` text T-w0emnj introduces; depends_on T-w0emnj added

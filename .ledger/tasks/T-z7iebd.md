@@ -28,7 +28,7 @@ New read-only subcommand `brief <id> [--last N] [--no-git]` (default N=10), plus
 - `last_activity`, `path`, `spec_lines` (line count only — the Spec body is deliberately EXCLUDED so the one file read stays the authority, DESIGN §3; PROTOCOL step 2 still says read the file).
 Only `recent_log` is bounded — say so in the docs. Human rendering (~15 lines): id/prio/size/title/status/claimed_by, `open steps:` (with n), `human:`, `dead ends:`, `recent:` (`ts verb: text`), `commits:`, last_activity. Ids resolve via `load_task_or_die(for_write=False)` as `show` does (lock-free; works on structurally broken files; same refusals). `--last`/`--no-git` are accepted by `brief`, and by `show`/`next` only together with `--brief`; `validate --no-git` is unchanged.
 
-Protocol: REPLACE the clause in PROTOCOL_TEXT step 2 ("Read its file (Spec, Next Steps, Open Questions, recent Log)") with "Read its file (Spec, Next Steps, Open Questions; `ledger brief <id> --json` for the recent Log on long tasks)"; re-run init in this repo so PROTOCOL.md/CLAUDE.md regenerate; README "Daily commands"; DESIGN §5 command list. Switching `next`'s DEFAULT payload is T-fzyn4o (a human decision); this task leaves defaults untouched.
+Protocol: REPLACE the clause in PROTOCOL_TEXT step 2 ("Read its file (Spec, Next Steps, Open Questions, recent Log)") with "Read its file (Spec, Next Steps, Open Questions; `ledger brief <id> --json` for the recent Log on long tasks)"; re-run init in this repo so PROTOCOL.md/CLAUDE.md regenerate (sequence after T-w0emnj, which owns the PROTOCOL_TEXT budget; if T-2e587s has landed, bump PROTOCOL_VERSION in the same commit); README "Daily commands"; DESIGN §5 command list. Switching `next`'s DEFAULT payload is T-fzyn4o (a human decision); this task leaves defaults untouched.
 
 ### DESIGN.md principles
 
@@ -63,3 +63,4 @@ Task files untouched; a pre-brief vendored copy gives argparse exit 3 (T-2e587s 
 - 2026-09-01T23:48:44Z [claude-2026-09-01-a] step: added '--brief on show and next (replaces the task_full shape; -n rows unchanged)'
 - 2026-09-01T23:48:44Z [claude-2026-09-01-a] step: added 'Replace the PROTOCOL_TEXT step-2 clause; re-run init; README; DESIGN §5'
 - 2026-09-01T23:48:44Z [claude-2026-09-01-a] step: added 'Tests incl. envelope + lock-free lists, plain fixture, trailer-only effective_commits'
+- 2026-09-02T00:06:25Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: sequence the PROTOCOL_TEXT edit after T-w0emnj; bump PROTOCOL_VERSION if T-2e587s has landed

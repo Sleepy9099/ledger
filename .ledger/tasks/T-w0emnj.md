@@ -26,7 +26,7 @@ Replace — do not append to — the "Decision you can't make?" and "Leave bread
 
 ```
 - One intent, one verb — prose in a note controls nothing:
-  fact / dead end    -> `ledger note <id> "..."`
+  fact / dead end    -> `ledger note <id> "..."` (`--dead-end` once T-yfvuya lands)
   new obligation     -> `ledger add ...` (never a note saying "someone should")
   X must land first  -> `ledger add --after X` / `ledger set <id> --add-depends X`
                         (`next` clears it itself when X is done; a dropped X never
@@ -39,11 +39,15 @@ Replace — do not append to — the "Decision you can't make?" and "Leave bread
   landed             -> trailer `Ledger-Task: <id>` / `ledger done`
 ```
 
-plus one sentence: "A note that asks a future session to act is not the action — file the task or step instead." When T-71aehi lands, the duplicate line names `--duplicate-of`.
+plus one sentence: "A note that asks a future session to act is not the action — file the task or step instead." When T-71aehi lands, the duplicate line names `--duplicate-of`; prefer landing T-71aehi first so the protocol teaches the machine-visible form from the start (a prose `--why "duplicate of T-x"` stays invisible to tooling by design). Add one sentence sanctioning review §3 (the review's most valued behaviour, unsanctioned by any protocol text today — "do NOT silently expand your current task" reads as opposite pressure): "If investigation shows the Spec's premise is wrong, record the corrected understanding in the Spec and a `note`, then implement the corrected intent — that is not scope expansion."
 
-Add under "Finishing a task": "If an integrator/orchestrator owns commits and closing in this project, hand off with `ledger release <id> --blocked --on "external: ready for integration" --note "what passed locally"` instead of `done`. The integrator lists `ledger list --status blocked --json` (rows whose `blocked_on` starts with `external: ready`), closes with `ledger done <id> --commit <sha>` (no `--force`), or sends it back with `ledger release <id> --note "integration failed: ..."`. An integrator may commit against a handed-off task with the normal `Ledger-Task:` trailer — the handoff is the authorization, so 'never work on a task you haven't claimed' reads 'claimed or handed to you'."
+Add under "Finishing a task": "If an integrator/orchestrator owns commits and closing in this project, hand off with `ledger release <id> --blocked --on "external: ready for integration" --note "what passed locally"` instead of `done`. The integrator lists `ledger list --status blocked --json` (rows whose `blocked_on` starts with `external: ready`), closes with `ledger done <id> --commit <sha>` (no `--force`), or sends it back with `ledger release <id> --note "integration failed: ..."`. An integrator may commit against a handed-off task with the normal `Ledger-Task:` trailer — the handoff is the authorization, so 'never work on a task you haven't claimed' reads 'claimed or handed to you'." Qualify session-end step 2 for waves (review §13/§14): on an unmerged worker branch `validate --coverage --strict` checks that branch only; the integrator runs it on the integrated tree, and the full test suite is a shared resource the orchestrator schedules, not something every worker runs at session end.
 
 Mirror in README "Daily commands" (add `--after <id>` to the `add` row; add a `set <id> --priority|--size|--add-depends|--remove-depends|--add-tag` row — `set` is absent today; add the handoff line next to `release`), DESIGN §9 summary, DESIGN §5 near "Closing verbs honor claims", and DESIGN decision #6: "reconsidered after the first multi-agent wave; stays cut because `release --blocked --on "external: ..."` already yields the handoff state — see T-ik6wl7." Also fix the DESIGN wording drift: §1 "Deliberately absent: ... lock files" and §11 "index/counter/lock files and daemons" contradict §7(g)'s `.ledger/.lock`; reword both to "lock files as state".
+
+### PROTOCOL_TEXT sequencing and budget (review §22)
+
+Seven filed items edit the same PROTOCOL_TEXT literal and each re-runs init: T-ntt2zz (search bullet), T-z7iebd (step-2 clause), T-yfvuya (dead-end clause), T-eb6bas (session-end rewrite), T-z1dkju (optional options-under-questions sentence), T-5z04ex ("forgot on a pushed commit" sentence) and the T-zl7jh5 enrichment (trailer bullet + Never entry). This task lands FIRST and owns the aggregate: add a test pinning PROTOCOL_TEXT at no more than 80 lines and 4,000 bytes (72 lines / 3,456 bytes today), so every later edit must replace wording rather than append; each later task edits the constant and re-runs init in its own commit, sequenced after this one to avoid conflicting hunks on ledger.py. Also add a DESIGN Appendix sentence the review's "tasks reopened" metric assumes away: "closed is terminal — done/dropped are refused by every mutating verb; a regression or redo is a new task (search first)".
 
 ### Design (code, xs)
 
@@ -82,3 +86,4 @@ Text plus one Log-text change; no storage, header, verb, status or hook change; 
 - 2026-09-01T23:48:42Z [claude-2026-09-01-a] step: added 'cmd_release --blocked: Log text 'blocked on <blocked_on> — <note>'; include blocked_on in the human line'
 - 2026-09-01T23:48:42Z [claude-2026-09-01-a] step: added 'Re-run init in this repo; README Daily commands (set row, --after, handoff line); DESIGN §5/§9, decision #6 note, fix the §1/§11 lock-file wording drift'
 - 2026-09-01T23:48:42Z [claude-2026-09-01-a] step: added 'Tests: end-to-end handoff sequence, release Log text, init wording assertions, dogfood PROTOCOL.md == PROTOCOL_TEXT'
+- 2026-09-02T00:06:24Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: this task now owns PROTOCOL_TEXT sequencing and a size-pin test (7 other tasks edit the same literal); ontology line names --dead-end once T-yfvuya lands; added the review §3 'correct the premise' sentence, the wave session-end qualification, and a 'closed is terminal' DESIGN sentence
