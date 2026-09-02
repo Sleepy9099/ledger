@@ -4,10 +4,10 @@
 
 All implementation work in this repo is tracked in `.ledger/tasks/` via
 `python .ledger/ledger.py` (called `ledger` below). Task files are plain
-Markdown — you may READ them directly. Headers, `## Commits`, and `## Log`
-are written ONLY through the CLI; you may edit Spec / Next Steps /
-Open Questions prose directly with your file tools. Always pass `--json`
-and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
+Markdown; read them directly. Headers, `## Commits`, and `## Log` are
+written ONLY through the CLI; edit Spec / Next Steps / Open Questions prose
+directly with your file tools. Always pass `--json` and parse
+`{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 
 ## Session start — always
 
@@ -18,8 +18,8 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
    writing code; that is your handoff. `held` lists tasks you already hold
    from earlier — resume those before taking more. If `task` is null,
    `why` explains it — report that instead of inventing work.
-3. `ledger questions --human --json` — surface anything listed to the
-   human in your first message.
+3. `ledger questions --human --json` — surface anything listed in your
+   first message.
 4. Before implementing, `ledger search <symbol|component|error> --json`
    surfaces prior dead ends and landmines recorded on other tasks.
 
@@ -27,7 +27,7 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 
 - One intent, one verb — prose in a note controls nothing:
   fact / dead end    -> `ledger note <id> "..."` (`--dead-end` for what
-                        did NOT work: the most valuable breadcrumb)
+                        did NOT work)
   new obligation     -> `ledger search <term> --json` first; an open task
                         covers it -> enrich it (`note` / `step add`); must
                         follow it -> `add --after <id>`; else `ledger add
@@ -54,10 +54,12 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
   a `## ` line starts a new file section. Fenced ``` examples are safe.
   Checkbox lines must be exactly `- [ ] text` / `- [x] text`.
 - EVERY commit that advances a task ends with a trailer line in its LAST
-  paragraph: `Ledger-Task: <id>` (one per related task). Genuinely
-  unrelated commits use `Ledger-Exempt: <short reason>`. Forgot the
+  paragraph: `Ledger-Task: <id>` (one per related task). Forgot the
   trailer? Unpushed: amend the message. Pushed: `ledger link <id> <sha>`
-  — an explicit link counts as coverage.
+  — an explicit link counts as coverage. `Ledger-Exempt: <reason>` is
+  ONLY for commits with no product-work obligation (merge/revert
+  mechanics, ledger bookkeeping, generated artifacts, docs, CI metadata);
+  code or tests without a task need `ledger add` first, never an exemption.
 - Commit `.ledger/` changes together with the code they describe.
 
 ## Finishing a task
@@ -71,8 +73,8 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
   --note "what passed locally"`. The integrator queue is `ledger list
   --status blocked --json`; the integrator closes with `ledger done <id>
   --commit <sha>` (no --force) or sends it back with `ledger release <id>
-  --note "integration failed: ..."`, and may commit against the handed-off
-  task with the normal trailer — the handoff is the authorization.
+  --note "integration failed: ..."`; committing against a handed-off task
+  needs no claim — the handoff is the authorization.
 
 ## Session end — never skip, even out of context budget
 
@@ -81,24 +83,24 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
    stopped and why"` (already blocked? `release <id> --blocked --on <same
    reason> --note "..."` — a plain release resets it to todo).
 2. `ledger validate --coverage --strict --json` — fix every violation
-   you caused (follow the fix_hints) BEFORE your final commit. On an
-   unmerged worker branch this checks that branch only; the integrator
-   runs it (and the full suite) on the integrated tree.
+   you caused (follow the fix_hints) BEFORE your final commit. On a worker
+   branch this checks that branch only; the integrator re-runs it (and the
+   full suite) on the integrated tree.
 
 ## After any merge or rebase
 
-- Run `ledger validate --coverage` and `ledger scan --write`, then fix what
-  they report (--coverage also runs the Log tamper checks).
-- Log-section conflict: keep BOTH sides' lines, delete the markers
-  (lines are timestamped; order does not matter).
-- Header-field conflict: pick the value matching the latest real event
-  per the Log lines, then re-run `ledger validate`.
+- Run `ledger validate --coverage` and `ledger scan --write`; fix what
+  they report. Log-section conflict: keep BOTH sides' lines, delete the
+  markers (timestamped, order-free). Header-field conflict: pick the value
+  matching the latest Log event, then re-run `ledger validate`.
 
 ## Never
 
 - Never edit headers, `## Commits`, or `## Log` by hand; never delete or
-  rewrite existing Log lines (CI detects tampering).
-- Never mint task ids by hand; only `ledger add`.
+  rewrite existing Log lines (CI detects it).
+- Never mint task ids by hand; only `ledger add`. Never edit
+  `exempt_patterns` / `exempt_allowed_paths` to make a commit pass — ask
+  via a HUMAN question.
 - Never delete a task file (`drop` instead), never mark work done
   without evidence, never commit code for work that has no task, and
   never work on a task you haven't claimed (or been handed).

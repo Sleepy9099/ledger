@@ -1,10 +1,12 @@
 ---
 id: T-zl7jh5
 title: Path-policy for Ledger-Exempt commits
-status: todo
+status: in_progress
 priority: p2
 size: m
 created: 2026-08-28T11:54:59Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T02:35:30Z
 tags: integrity
 ---
 
@@ -47,3 +49,4 @@ Review §19: an exemption must mean "no product-work obligation exists", never "
 - 2026-09-01T23:48:49Z [claude-2026-09-01-a] question: added (HUMAN): When exempt_allowed_paths is set, should the policy also apply to pattern-exempt MERGE commits (parents > 1) via the --cc combined diff? Verified: `diff-tree --cc --name-only` lists nothing for a clean merge AND for a conflict resolved by taking one side verbatim; it lists only files whose result differs from every parent, so it flags exactly evil-merge content. (a) explicit-trailer channel only (current spec; then DESIGN §4's 'evil-merge content is in scope' sentence must be corrected to 'unless the subject matches exempt_patterns'); (b) also path-check pattern-exempt true merges (single-parent ^Revert and squash merges stay exempt — note the squash gap); (c) path-check every pattern-exempt commit except ^Revert (covers squash merges). Recommendation: (b).
 - 2026-09-02T00:06:24Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: coverage fix_hint wording made decision-neutral (link is a remedy only under T-5z04ex option b; land after it); generated artifacts added to the exemption taxonomy with a default-glob decision
 - 2026-09-02T00:54:55Z [claude-2026-09-01-b] answer: 'HUMAN: When exempt_allowed_paths is set, should the policy also apply to pattern-exempt MERGE commits (parents > 1) via the --cc combined diff? Verified: `diff-tree --cc --name-only` lists nothing for a clean merge AND for a conflict resolved by taking one side verbatim; it lists only files whose result differs from every parent, so it flags exactly evil-merge content. (a) explicit-trailer channel only (current spec; then DESIGN §4's 'evil-merge content is in scope' sentence must be corrected to 'unless the subject matches exempt_patterns'); (b) also path-check pattern-exempt true merges (single-parent ^Revert and squash merges stay exempt — note the squash gap); (c) path-check every pattern-exempt commit except ^Revert (covers squash merges). Recommendation: (b).' -> (b) also path-check pattern-exempt TRUE merges via the --cc combined diff. Operator criteria: a clean merge lists nothing (no false positives), an evil merge is real content that must trace to a task; single-parent ^Revert and squash merges stay exempt — record the squash gap in DESIGN as a known limitation and tell agents to put the Ledger-Task trailer in the squash message's last paragraph.
+- 2026-09-02T02:35:30Z [claude-2026-09-01-b] claim: claimed

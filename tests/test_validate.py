@@ -183,7 +183,8 @@ def test_validation_code_table_is_stable(ledger_mod):
     assert set(ledger_mod.VALIDATION_CODES) == {
         "encoding", "parse", "conflict-markers", "id-filename", "id-unique",
         "enums", "refs", "state-coherence", "done-evidence",
-        "done-human-questions", "coverage", "trailer-dangling", "stale-claim",
+        "done-human-questions", "coverage", "trailer-dangling",
+        "exempt-policy", "stale-claim",
         "xl-open", "checkbox-grammar", "done-loose-ends", "unknown-key",
         "sha-unreachable", "linked-never-claimed", "log-tamper",
         "exempt-ratio",

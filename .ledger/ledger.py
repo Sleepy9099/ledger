@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.2.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 10
+PROTOCOL_VERSION = 11
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -103,6 +103,16 @@ DEFAULT_CONFIG = {
     "stale_claim_days": 7,
     "exempt_patterns": ["^Merge ", "^Revert "],
 }
+# Written by init into a NEW config.json only — deliberately NOT in
+# DEFAULT_CONFIG, which would switch the policy on for every existing repo
+# the moment it re-vendors ledger.py. Absent key = policy off = today's
+# behavior. Globs: `dir/**` prefix, a glob with `/` against the full path,
+# a `/`-less glob against the basename at any depth. `.ledger/**` is always
+# allowed. Includes the bootstrap CI snippet path and generic lockfiles.
+DEFAULT_EXEMPT_ALLOWED_PATHS = [
+    "docs/**", "*.md", ".github/**", ".gitignore", ".gitattributes",
+    "LICENSE*", "*.lock", "package-lock.json", "tests/test_ledger.py",
+]
 
 # All violation codes ledger validate can emit, with their default severity.
 # Tests keep this table and the trigger fixtures in lockstep.
@@ -119,6 +129,7 @@ VALIDATION_CODES = {
     "done-human-questions": "error",
     "coverage": "error",            # git, --coverage only
     "trailer-dangling": "error",    # git, --coverage only
+    "exempt-policy": "error",       # git, --coverage only; exempt_allowed_paths set
     "stale-claim": "warning",
     "xl-open": "warning",
     "checkbox-grammar": "warning",
@@ -134,10 +145,10 @@ PROTOCOL_TEXT = """# Ledger protocol (required workflow for agents)
 
 All implementation work in this repo is tracked in `.ledger/tasks/` via
 `python .ledger/ledger.py` (called `ledger` below). Task files are plain
-Markdown — you may READ them directly. Headers, `## Commits`, and `## Log`
-are written ONLY through the CLI; you may edit Spec / Next Steps /
-Open Questions prose directly with your file tools. Always pass `--json`
-and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
+Markdown; read them directly. Headers, `## Commits`, and `## Log` are
+written ONLY through the CLI; edit Spec / Next Steps / Open Questions prose
+directly with your file tools. Always pass `--json` and parse
+`{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 
 ## Session start — always
 
@@ -148,8 +159,8 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
    writing code; that is your handoff. `held` lists tasks you already hold
    from earlier — resume those before taking more. If `task` is null,
    `why` explains it — report that instead of inventing work.
-3. `ledger questions --human --json` — surface anything listed to the
-   human in your first message.
+3. `ledger questions --human --json` — surface anything listed in your
+   first message.
 4. Before implementing, `ledger search <symbol|component|error> --json`
    surfaces prior dead ends and landmines recorded on other tasks.
 
@@ -157,7 +168,7 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
 
 - One intent, one verb — prose in a note controls nothing:
   fact / dead end    -> `ledger note <id> "..."` (`--dead-end` for what
-                        did NOT work: the most valuable breadcrumb)
+                        did NOT work)
   new obligation     -> `ledger search <term> --json` first; an open task
                         covers it -> enrich it (`note` / `step add`); must
                         follow it -> `add --after <id>`; else `ledger add
@@ -184,10 +195,12 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
   a `## ` line starts a new file section. Fenced ``` examples are safe.
   Checkbox lines must be exactly `- [ ] text` / `- [x] text`.
 - EVERY commit that advances a task ends with a trailer line in its LAST
-  paragraph: `Ledger-Task: <id>` (one per related task). Genuinely
-  unrelated commits use `Ledger-Exempt: <short reason>`. Forgot the
+  paragraph: `Ledger-Task: <id>` (one per related task). Forgot the
   trailer? Unpushed: amend the message. Pushed: `ledger link <id> <sha>`
-  — an explicit link counts as coverage.
+  — an explicit link counts as coverage. `Ledger-Exempt: <reason>` is
+  ONLY for commits with no product-work obligation (merge/revert
+  mechanics, ledger bookkeeping, generated artifacts, docs, CI metadata);
+  code or tests without a task need `ledger add` first, never an exemption.
 - Commit `.ledger/` changes together with the code they describe.
 
 ## Finishing a task
@@ -201,8 +214,8 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
   --note "what passed locally"`. The integrator queue is `ledger list
   --status blocked --json`; the integrator closes with `ledger done <id>
   --commit <sha>` (no --force) or sends it back with `ledger release <id>
-  --note "integration failed: ..."`, and may commit against the handed-off
-  task with the normal trailer — the handoff is the authorization.
+  --note "integration failed: ..."`; committing against a handed-off task
+  needs no claim — the handoff is the authorization.
 
 ## Session end — never skip, even out of context budget
 
@@ -211,24 +224,24 @@ and parse `{"ok", "data", "errors"}`; every error carries a `fix_hint`.
    stopped and why"` (already blocked? `release <id> --blocked --on <same
    reason> --note "..."` — a plain release resets it to todo).
 2. `ledger validate --coverage --strict --json` — fix every violation
-   you caused (follow the fix_hints) BEFORE your final commit. On an
-   unmerged worker branch this checks that branch only; the integrator
-   runs it (and the full suite) on the integrated tree.
+   you caused (follow the fix_hints) BEFORE your final commit. On a worker
+   branch this checks that branch only; the integrator re-runs it (and the
+   full suite) on the integrated tree.
 
 ## After any merge or rebase
 
-- Run `ledger validate --coverage` and `ledger scan --write`, then fix what
-  they report (--coverage also runs the Log tamper checks).
-- Log-section conflict: keep BOTH sides' lines, delete the markers
-  (lines are timestamped; order does not matter).
-- Header-field conflict: pick the value matching the latest real event
-  per the Log lines, then re-run `ledger validate`.
+- Run `ledger validate --coverage` and `ledger scan --write`; fix what
+  they report. Log-section conflict: keep BOTH sides' lines, delete the
+  markers (timestamped, order-free). Header-field conflict: pick the value
+  matching the latest Log event, then re-run `ledger validate`.
 
 ## Never
 
 - Never edit headers, `## Commits`, or `## Log` by hand; never delete or
-  rewrite existing Log lines (CI detects tampering).
-- Never mint task ids by hand; only `ledger add`.
+  rewrite existing Log lines (CI detects it).
+- Never mint task ids by hand; only `ledger add`. Never edit
+  `exempt_patterns` / `exempt_allowed_paths` to make a commit pass — ask
+  via a HUMAN question.
 - Never delete a task file (`drop` instead), never mark work done
   without evidence, never commit code for work that has no task, and
   never work on a task you haven't claimed (or been handed).
@@ -711,11 +724,92 @@ def commit_files(repo: Path, sha: str, merge: bool) -> list[str] | None:
     else:
         args = ["diff-tree", "--no-commit-id", "--name-only", "-r", "--root",
                 sha]
-    rc, out = run_git(args, repo)
+    # quotePath=false: non-ASCII paths come back unquoted, so glob policies
+    # see `docs/ä.md`, not `"docs/\303\244.md"`
+    rc, out = run_git(["-c", "core.quotePath=false", *args], repo)
     if rc != 0:
         return None
     return [line for line in out.split("\n")
             if line.strip() and not re.fullmatch(r"[0-9a-f]{40}", line.strip())]
+
+
+EXEMPT_POLICY_HINT = (
+    "exemptions are only for commits with no product-work obligation; this "
+    "work needs a task: `ledger add \"...\"`, then a `Ledger-Task:` trailer "
+    "(unpushed) or `ledger link <id> <sha>` (pushed). Widening "
+    "exempt_allowed_paths is a project decision — ask via a HUMAN question, "
+    "do not edit config.json to make this commit pass; a machine-produced "
+    "diff (generated artifacts) is the one case for widening")
+
+
+def exempt_policy_globs(config: dict) -> list[str] | None:
+    """The allowed-path globs, `.ledger/**` always first; None = policy off."""
+    raw = config.get("exempt_allowed_paths")
+    if raw is None:
+        return None
+    if (not isinstance(raw, list)
+            or any(not isinstance(g, str) or not g.strip() for g in raw)):
+        raise LedgerError(
+            "config", "exempt_allowed_paths must be a list of non-empty "
+            "glob strings", fix_hint="fix .ledger/config.json")
+    return [".ledger/**"] + [g.strip() for g in raw]
+
+
+def _glob_re(glob: str) -> re.Pattern:
+    """gitignore-like: `*` and `?` never cross `/`, `**` crosses anything.
+    (stdlib fnmatch lets `*` swallow directories — `build/*.js` would match
+    `build/sub/x.js` — which is the surprising rule.)"""
+    out, i = "", 0
+    while i < len(glob):
+        if glob.startswith("**", i):
+            out += ".*"
+            i += 2
+        elif glob[i] == "*":
+            out += "[^/]*"
+            i += 1
+        elif glob[i] == "?":
+            out += "[^/]"
+            i += 1
+        else:
+            out += re.escape(glob[i])
+            i += 1
+    return re.compile("^" + out + "$")
+
+
+def path_allowed(path: str, globs: list[str]) -> bool:
+    name = path.rsplit("/", 1)[-1]
+    for g in globs:
+        if g.endswith("/**"):
+            prefix = g[:-3]
+            if path == prefix or path.startswith(prefix + "/"):
+                return True
+        elif "/" in g:
+            if _glob_re(g).match(path):
+                return True
+        elif _glob_re(g).match(name):
+            return True
+    return False
+
+
+def exempt_policy_offenders(commit: Commit, repo: Path, globs: list[str],
+                            exempt_res: list[re.Pattern]) -> list[str] | None:
+    """Paths an exempt commit touches outside the policy, or None when the
+    policy does not apply to it. Applies to the explicit `Ledger-Exempt`
+    channel and — decision (b), 2026-09-01 — to pattern-exempt TRUE merges
+    via the combined diff (a clean merge lists nothing; only evil-merge
+    content shows). Single-parent pattern exemptions (^Revert, squash
+    merges) stay exempt: the squash gap is documented, not closed."""
+    merge = len(commit.parents) > 1
+    if commit.exempt_reason is not None:
+        pass
+    elif merge and any(p.search(commit.subject) for p in exempt_res):
+        pass
+    else:
+        return None
+    files = commit_files(repo, commit.sha, merge=merge)
+    if files is None:
+        return ["(git diff-tree failed — refusing to guess)"]
+    return [f for f in files if not path_allowed(f, globs)]
 
 
 def compile_exempt_patterns(config: dict) -> list[re.Pattern]:
@@ -1435,6 +1529,7 @@ def cmd_init(args) -> int:
             config["prefix"] = args.prefix
         repo = git_toplevel(ledger_dir.parent)
         config["baseline"] = git_head(repo) if repo else None
+        config["exempt_allowed_paths"] = list(DEFAULT_EXEMPT_ALLOWED_PATHS)
         atomic_write(cfg_path, json.dumps(config, indent=2))
     else:
         config = dict(DEFAULT_CONFIG)
@@ -2388,9 +2483,10 @@ def cmd_scan(args) -> int:
     if commits is None:
         raise LedgerError("coverage", error or "git walk failed")
     exempt_res = compile_exempt_patterns(ctx.config)
+    policy = exempt_policy_globs(ctx.config)
     explicit = explicit_links(tasks)
     id_token_re = id_token_pattern(ctx.prefix)
-    linked, exempt, unlinked, dangling = [], [], [], []
+    linked, exempt, unlinked, dangling, policy_violations = [], [], [], [], []
     for c in commits:
         bucket, bad_ids = classify_commit(c, repo, known, exempt_res, explicit)
         for raw in bad_ids:
@@ -2407,6 +2503,10 @@ def cmd_scan(args) -> int:
                     linked.append({"sha": c.sha7, "task": tid, "via": "link"})
         elif bucket == "exempt":
             exempt.append(c.sha7)
+            bad = (exempt_policy_offenders(c, repo, policy, exempt_res)
+                   if policy is not None else None)
+            if bad:
+                policy_violations.append({"sha": c.sha7, "paths": bad})
         else:
             unlinked.append({"sha": c.sha7, "subject": c.subject})
     backfilled = []
@@ -2430,10 +2530,14 @@ def cmd_scan(args) -> int:
     data = {"linked": linked, "exempt": exempt, "unlinked": unlinked,
             "dangling": dangling, "backfilled": backfilled,
             "commits_scanned": len(commits),
+            "exempt_policy_violations": policy_violations,
             "similar_open_pairs": similar_pairs[:20]}
     human = [f"scanned {len(commits)} commit(s): {len(linked)} linked, "
              f"{len(exempt)} exempt, {len(unlinked)} unlinked, "
              f"{len(dangling)} dangling"]
+    for v in policy_violations:
+        human.append(f"  exempt-policy {v['sha']}: touches "
+                     + ", ".join(v["paths"][:3]))
     for s in similar_pairs[:20]:
         human.append(f"  similar open titles: {s['a']} ~ {s['b']} "
                      f"({s['score']}) — ledger drop <dup> --duplicate-of "
@@ -3062,6 +3166,7 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
         return violations
 
     exempt_res = compile_exempt_patterns(ctx.config)
+    policy = exempt_policy_globs(ctx.config)
     explicit = explicit_links(tasks)
     id_token_re = id_token_pattern(ctx.prefix)
     exempt_count = 0
@@ -3075,6 +3180,17 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
                 violations.append(err("trailer-dangling", msg, fix_hint=hint))
         if bucket == "exempt":
             exempt_count += 1
+            # the commit stays exempt (so exempt-ratio is unchanged and
+            # coverage never fires alongside): the abuse gets its own code
+            bad = (exempt_policy_offenders(c, repo, policy, exempt_res)
+                   if policy is not None else None)
+            if bad:
+                violations.append(err(
+                    "exempt-policy",
+                    f"commit {c.sha7} ('{c.subject}') is exempt but touches "
+                    f"{len(bad)} path(s) outside exempt_allowed_paths: "
+                    + ", ".join(bad[:3]),
+                    fix_hint=EXEMPT_POLICY_HINT))
         elif bucket == "unlinked":
             violations.append(err(
                 "coverage",

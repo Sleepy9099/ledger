@@ -21,7 +21,8 @@ def test_init_idempotent_and_bootstrap_files(repo):
     protocol = (ledger / "PROTOCOL.md").read_text(encoding="utf-8")
     for phrase in ("--add-depends", "not the action", "ready for integration",
                    "not scope expansion", "ledger search", "bounded digest",
-                   "`--full`", "list --mine", "indented lines"):
+                   "`--full`", "list --mine", "indented lines",
+                   "no product-work obligation", "exempt_allowed_paths"):
         assert phrase in protocol and phrase in claude  # T-w0emnj, T-ntt2zz
     assert "ledger link <id> <sha>" in protocol
     assert "explicit link counts as coverage" in protocol

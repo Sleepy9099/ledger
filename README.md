@@ -131,6 +131,27 @@ error carries a machine-actionable `fix_hint`. Exit codes: 0 ok,
 Agent identity comes from `--session`, else the `LEDGER_SESSION` env var,
 else `git config user.name` — set the env once per session.
 
+## Exemptions are policy, not convention
+
+`Ledger-Exempt: <reason>` means "no product-work obligation exists" —
+merge/revert mechanics, ledger bookkeeping, generated artifacts, docs, CI
+metadata — never "an obligation exists but filing a task is inconvenient".
+`init` writes `exempt_allowed_paths` into a NEW project's config.json
+(`docs/**`, `*.md`, `.github/**`, `.gitignore`, `.gitattributes`,
+`LICENSE*`, `*.lock`, `package-lock.json`, `tests/test_ledger.py`; `.ledger/**`
+is always allowed): with the key set, an exempt commit — the explicit
+trailer, and a `^Merge`-pattern TRUE merge via its combined diff, so an evil
+merge's conflict-resolution content counts — may touch only matching paths;
+anything else is an `exempt-policy` error naming the offending paths (the
+commit stays exempt, so `coverage` never fires alongside). Existing repos
+(key absent) are unchanged until they opt in. Glob rules: `dir/**` is a
+prefix, a glob containing `/` matches the full path (`*` and `?` never
+cross `/`, `**` does — gitignore-like, not fnmatch), a `/`-less glob
+matches the basename at any depth. Widening the list is a project decision
+— ask via a HUMAN question. Known gap: a single-parent squash merge whose
+subject matches `^Merge ` stays exempt — put the `Ledger-Task:` trailer in
+the squash message's last paragraph instead.
+
 ## Versions
 
 `ledger.py` carries three independent version lines, all printed by

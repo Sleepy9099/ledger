@@ -59,9 +59,16 @@ state is either a per-task file or git history itself (the gitignored
   "prefix": "T",
   "baseline": "<sha of HEAD at init — commits before it are exempt from coverage>",
   "stale_claim_days": 7,
-  "exempt_patterns": ["^Merge ", "^Revert "]
+  "exempt_patterns": ["^Merge ", "^Revert "],
+  "exempt_allowed_paths": ["docs/**", "*.md", ".github/**", ".gitignore",
+                           ".gitattributes", "LICENSE*", "*.lock",
+                           "package-lock.json", "tests/test_ledger.py"]
 }
 ```
+
+`exempt_allowed_paths` is written by `init` into a NEW config.json only —
+never merged from `DEFAULT_CONFIG`, so re-vendoring `ledger.py` cannot
+switch the policy on for an existing repo (§4).
 
 ## 2. Task file format
 
@@ -164,6 +171,23 @@ a typo'd id never becomes a permanent strict-CI failure. A trailer line
 naming several ids (`Ledger-Task: T-a, T-b`) is diagnosed as such but never
 used for linkage — one canonical syntax (decision #10).
 
+**Exemption policy (2026-09-01):** an exemption must mean "no product-work
+obligation exists", never "an obligation exists but task creation is
+inconvenient". When `exempt_allowed_paths` is set, a commit carrying
+`Ledger-Exempt` — and, decision (b), a `^Merge`-pattern TRUE merge via its
+combined diff — may touch only matching paths (plus `.ledger/**`); anything
+else is `exempt-policy` (error tier, distinct from `coverage`; the commit
+stays in the exempt bucket so the ratio and `coverage` are unaffected).
+Globs are gitignore-like (`*`/`?` never cross `/`, `**` does; a `/`-less
+glob matches the basename at any depth) rather than stdlib fnmatch, whose
+`*` would let `build/*.js` swallow `build/sub/x.js`. A
+git failure lists an offender rather than guessing. Single-parent pattern
+exemptions (`^Revert`, squash merges) are not path-checked — a documented
+gap. The taxonomy lives in the fix_hint, where agents read it at the moment
+of violation; widening the list is a HUMAN decision, never an agent edit.
+This scopes EXEMPTIONS, not coverage (decision #11 stands): it can only
+make the guarantee stricter.
+
 **Reconciliation:** `ledger scan` classifies every commit in `baseline..HEAD`
 as **linked** / **exempt** (Ledger-Exempt, `exempt_patterns` match, or touches
 only `.ledger/`) / **unlinked** / **dangling** (trailer names a nonexistent
@@ -172,8 +196,9 @@ an explicit claim, so backfilling is not fabricated evidence. *Inferred*
 linkage (branch names, file overlap) is banned. Root commits diff against the
 empty tree (`--root`), merge commits use the combined diff (`--cc`, so a
 clean merge introduces nothing but an evil merge's conflict-resolution
-content is in scope), and a git failure classifies as unlinked — coverage
-never passes on a guess.
+content is in scope — under `exempt_allowed_paths` even when the subject
+matches `exempt_patterns`), and a git failure classifies as unlinked —
+coverage never passes on a guess.
 
 **Why it stays honest:** coverage is computed FROM git history plus
 explicit, sha-verified link records — never from prose, branch names or file
@@ -293,7 +318,8 @@ closed ≥ created), `refs` (dangling depends_on/blocked_on, cycles),
 closed ⇔ done/dropped + closing Log line), `done-evidence` (**the core
 anti-hallucination check**), `done-human-questions`; with `--coverage`:
 `coverage` (**the verbatim "work is traceable" guarantee** — refuses shallow
-clones loudly) and `trailer-dangling`.
+clones loudly), `trailer-dangling`, and `exempt-policy` (an exempt commit
+touching paths outside `exempt_allowed_paths`; only when the key is set).
 
 Warnings (errors under `--strict`): `stale-claim`, `xl-open`,
 `checkbox-grammar` (near-miss checkbox lines that would silently escape the
@@ -508,7 +534,9 @@ deterministic token-overlap hint; a model's opinion must never gate CI).
     canonical channel stays honest).
 11. **Coverage scope:** EVERY commit in `baseline..HEAD` needs a trailer, an
     exemption, or to touch only `.ledger/` — path-glob scoping silently
-    shrinks the guarantee.
+    shrinks the guarantee. (`exempt_allowed_paths`, 2026-09-01, scopes which
+    commits may claim EXEMPT, not which need a trailer — it only ever makes
+    the guarantee stricter.)
 12. **Close verb:** `done` (mirrors the status value exactly — one less name
     to remember; enum-verb symmetry beat 2-of-3 majority for `close`).
     Closed is terminal: done/dropped are refused by every mutating verb; a

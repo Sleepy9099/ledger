@@ -31,7 +31,9 @@ def test_coverage_clean_then_catches_unlinked(repo):
 
 
 def test_exemption_channels(repo):
-    (repo.root / "a.txt").write_text("a\n", encoding="utf-8")
+    # the repo fixture carries init's exempt_allowed_paths default, so the
+    # explicit exemption must touch an allowed path (*.md)
+    (repo.root / "notes.md").write_text("a\n", encoding="utf-8")
     repo.commit_all("Chore work", ("Ledger-Exempt: tooling chore",))
     (repo.root / "b.txt").write_text("b\n", encoding="utf-8")
     repo.commit_all("Merge branch 'feature' into main")  # exempt_patterns
@@ -401,3 +403,134 @@ def test_wave_as_task_end_to_end(repo):
     population = {t["id"] for t in repo.j("list", "--tag", "wave:w1")[
         "data"]["tasks"]}
     assert population == {m1, m2, w}
+
+
+
+# --- exempt path policy (T-zl7jh5) -------------------------------------------
+
+def _set_policy(repo, globs):
+    cfg_path = repo.root / ".ledger" / "config.json"
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    if globs is None:
+        cfg.pop("exempt_allowed_paths", None)
+    else:
+        cfg["exempt_allowed_paths"] = globs
+    cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+
+def test_init_default_policy_and_bootstrap_stay_clean(repo):
+    cfg = json.loads((repo.root / ".ledger" / "config.json").read_text(
+        encoding="utf-8"))
+    assert "docs/**" in cfg["exempt_allowed_paths"]
+    assert "tests/test_ledger.py" in cfg["exempt_allowed_paths"]
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]  # the bootstrap commit passes
+
+
+def test_exempt_commit_outside_policy_is_flagged_not_uncovered(repo):
+    (repo.root / "src").mkdir()
+    (repo.root / "src" / "app.py").write_text("x\n", encoding="utf-8")
+    (repo.root / "docs").mkdir()
+    (repo.root / "docs" / "guide.md").write_text("g\n", encoding="utf-8")
+    sha = repo.commit_all("Sneak code in", ("Ledger-Exempt: misc",))
+    rc, payload = validate(repo, "--coverage")
+    assert rc == 1
+    pol = [e for e in payload["errors"] if e["code"] == "exempt-policy"]
+    assert len(pol) == 1 and sha[:7] in pol[0]["message"]
+    assert "src/app.py" in pol[0]["message"]
+    assert "docs/guide.md" not in pol[0]["message"]
+    assert "ledger add" in pol[0]["fix_hint"] and "HUMAN" in pol[0]["fix_hint"]
+    assert "coverage" not in codes(payload)  # never both for one commit
+    d = repo.j("scan")["data"]
+    assert sha[:7] in d["exempt"]  # still in the exempt bucket
+    assert d["exempt_policy_violations"] == [{"sha": sha[:7],
+                                              "paths": ["src/app.py"]}]
+    # docs-only exemption passes; without the key the policy is off
+    (repo.root / "docs" / "more.md").write_text("m\n", encoding="utf-8")
+    repo.commit_all("Docs only", ("Ledger-Exempt: docs",))
+    rc, payload = validate(repo, "--coverage")
+    assert [e for e in payload["errors"] if e["code"] == "exempt-policy"
+            and "more.md" in e["message"]] == []
+    _set_policy(repo, None)
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]
+
+
+def test_glob_semantics_and_config_validation(repo):
+    (repo.root / "deep" / "er").mkdir(parents=True)
+    (repo.root / "deep" / "er" / "README.md").write_text("r\n", encoding="utf-8")
+    (repo.root / "deep" / "er" / "LICENSE.txt").write_text("l\n", encoding="utf-8")
+    (repo.root / "gen").mkdir()
+    (repo.root / "gen" / "out.lock").write_text("o\n", encoding="utf-8")
+    repo.commit_all("Basename globs at any depth", ("Ledger-Exempt: meta",))
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]
+    _set_policy(repo, ["build/*.js"])
+    (repo.root / "build").mkdir()
+    (repo.root / "build" / "a.js").write_text("a\n", encoding="utf-8")
+    (repo.root / "build" / "sub").mkdir()
+    (repo.root / "build" / "sub" / "b.js").write_text("b\n", encoding="utf-8")
+    sha = repo.commit_all("Path glob is exact", ("Ledger-Exempt: build",))
+    rc, payload = validate(repo, "--coverage")
+    pol = [e for e in payload["errors"] if e["code"] == "exempt-policy"]
+    assert any(sha[:7] in e["message"] and "build/sub/b.js" in e["message"]
+               and "build/a.js" not in e["message"] for e in pol)
+    _set_policy(repo, ["docs/**", 7])
+    for call in (("validate", "--coverage"), ("scan",)):
+        r = repo.run(*call, "--json")
+        assert r.returncode == 2
+        assert json.loads(r.stdout)["errors"][0]["code"] == "config"
+
+
+def test_pattern_exempt_true_merge_is_path_checked_squash_is_not(repo):
+    # clean merge: --cc lists nothing -> exempt, no violation
+    repo.git("checkout", "-q", "-b", "clean")
+    (repo.root / "docs").mkdir()
+    (repo.root / "docs" / "c.md").write_text("c\n", encoding="utf-8")
+    repo.commit_all("Docs on a branch", ("Ledger-Exempt: docs",))
+    repo.git("checkout", "-q", "main")
+    (repo.root / "docs").mkdir(exist_ok=True)  # only existed on the branch
+    (repo.root / "docs" / "m.md").write_text("m\n", encoding="utf-8")
+    repo.commit_all("Docs on main", ("Ledger-Exempt: docs",))
+    repo.git("merge", "-q", "--no-ff", "clean", "-m", "Merge branch 'clean'")
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]
+    # evil merge under the ^Merge pattern: the resolution content is checked
+    repo.git("checkout", "-q", "-b", "side")
+    (repo.root / "conflict.py").write_text("side\n", encoding="utf-8")
+    repo.commit_all("Side change", ("Ledger-Exempt: docs",))  # (also flagged)
+    repo.git("checkout", "-q", "main")
+    (repo.root / "conflict.py").write_text("main\n", encoding="utf-8")
+    repo.commit_all("Main change", ("Ledger-Exempt: docs",))
+    r = repo.git("merge", "side", check=False)
+    assert r.returncode != 0
+    (repo.root / "conflict.py").write_text("evil\n", encoding="utf-8")
+    repo.git("add", "-A")
+    repo.git("commit", "-q", "-m", "Merge branch 'side' into main")
+    merge_sha = repo.git("rev-parse", "HEAD").stdout.strip()
+    rc, payload = validate(repo, "--coverage")
+    pol = [e for e in payload["errors"] if e["code"] == "exempt-policy"]
+    assert any(merge_sha[:7] in e["message"] and "conflict.py" in e["message"]
+               for e in pol)
+    assert not any(e["code"] == "coverage" and merge_sha[:7] in e["message"]
+                   for e in payload["errors"])
+    # a single-parent commit whose subject matches ^Merge (squash) stays
+    # exempt and unchecked: the documented gap
+    (repo.root / "squashed.py").write_text("s\n", encoding="utf-8")
+    squash = repo.commit_all("Merge pull request #7 from feature")
+    rc, payload = validate(repo, "--coverage")
+    assert not any(squash[:7] in e["message"] for e in payload["errors"])
+
+
+def test_non_ascii_paths_are_matched_unquoted(repo):
+    (repo.root / "docs").mkdir()
+    (repo.root / "docs" / "ä.md").write_text("ä\n", encoding="utf-8")
+    repo.commit_all("Unicode docs", ("Ledger-Exempt: docs",))
+    rc, payload = validate(repo, "--coverage", "--strict")
+    assert rc == 0, payload["errors"]
+    (repo.root / "src").mkdir()
+    (repo.root / "src" / "ä.py").write_text("ä\n", encoding="utf-8")
+    repo.commit_all("Unicode code", ("Ledger-Exempt: nope",))
+    rc, payload = validate(repo, "--coverage")
+    pol = [e for e in payload["errors"] if e["code"] == "exempt-policy"]
+    assert pol and "src/ä.py" in pol[-1]["message"]
