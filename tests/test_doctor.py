@@ -124,3 +124,37 @@ def test_doctor_never_touches_git_history(plain):
     """`plain` has no repository at all — doctor must still answer fully."""
     d = plain.j("doctor")
     assert d["ok"] and d["data"]["task_count"] == 0
+
+
+
+def test_protocol_adapters_are_maintained_and_verified(repo):
+    d = repo.j("init", "--adapter", "AGENTS.md")
+    assert d["data"]["adapters"] == ["CLAUDE.md", "AGENTS.md"]
+    cfg = json.loads((repo.root / ".ledger" / "config.json").read_text(
+        encoding="utf-8"))
+    assert cfg["protocol_adapters"] == ["CLAUDE.md", "AGENTS.md"]
+    agents = (repo.root / "AGENTS.md").read_text(encoding="utf-8")
+    assert agents.count("<!-- LEDGER:BEGIN -->") == 1
+    assert "ledger next --claim --json" in agents
+    repo.j("init")  # re-init keeps exactly one block per adapter
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        text = (repo.root / name).read_text(encoding="utf-8")
+        assert text.count("<!-- LEDGER:BEGIN -->") == 1, name
+    d = repo.j("doctor")
+    assert d["data"]["protocol_files_in_sync"] == {
+        "PROTOCOL.md": True, "CLAUDE.md": True, "AGENTS.md": True}
+    (repo.root / "AGENTS.md").write_text("# stale\n", encoding="utf-8")
+    d = repo.j("doctor")
+    assert d["data"]["protocol_files_in_sync"]["AGENTS.md"] is False
+    assert any(e["code"] == "protocol-stale" and "AGENTS.md" in e["message"]
+               for e in d["errors"])
+    # an existing AGENTS.md with other content keeps that content
+    (repo.root / "AGENTS.md").write_text("# House rules\n\nBe kind.\n",
+                                         encoding="utf-8")
+    repo.j("init")
+    agents = (repo.root / "AGENTS.md").read_text(encoding="utf-8")
+    assert agents.startswith("# House rules") and "Be kind." in agents
+    assert agents.count("<!-- LEDGER:BEGIN -->") == 1
+    # the protocol no longer assumes one vendor for the session id
+    assert "<agent>-<YYYY-MM-DD>" in (repo.root / ".ledger" / "PROTOCOL.md"
+                                      ).read_text(encoding="utf-8")

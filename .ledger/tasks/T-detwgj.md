@@ -1,10 +1,12 @@
 ---
 id: T-detwgj
 title: Protocol adapters: AGENTS.md alongside CLAUDE.md, configurable, verified by doctor
-status: todo
+status: in_progress
 priority: p2
 size: s
 created: 2026-09-02T04:51:27Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T05:08:50Z
 tags: distribution, protocol
 ---
 
@@ -30,3 +32,4 @@ init injects the protocol block into CLAUDE.md only and the session-id example s
 ## Log
 
 - 2026-09-02T04:51:27Z [claude-2026-09-01-b] add: created: Protocol adapters: AGENTS.md alongside CLAUDE.md, configurable, verified by doctor [p2/s] (tags: distribution, protocol)
+- 2026-09-02T05:08:50Z [claude-2026-09-01-b] claim: claimed

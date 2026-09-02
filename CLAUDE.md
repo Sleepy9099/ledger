@@ -11,7 +11,7 @@ directly with your file tools. Always pass `--json` and parse
 
 ## Session start — always
 
-1. Export a session id once: `LEDGER_SESSION=claude-<YYYY-MM-DD>-<letter>`.
+1. Export a session id once: `LEDGER_SESSION=<agent>-<YYYY-MM-DD>-<letter>`.
 2. `ledger next --claim --json` — this is your task (a bounded digest:
    open steps, HUMAN questions, dead ends, recent Log; `--full` for
    everything). Read its file (Spec, Next Steps, Open Questions) BEFORE

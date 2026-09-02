@@ -34,6 +34,8 @@ repo-root/
 ├── .gitattributes             # init appends: ".ledger/** text eol=lf"
 ├── CLAUDE.md                  # init appends the protocol block between
 │                              #   <!-- LEDGER:BEGIN --> / <!-- LEDGER:END -->
+├── AGENTS.md                  # ...and in every other file listed in
+│                              #   config.json "protocol_adapters" (init --adapter)
 └── .ledger/
     ├── ledger.py              # THE ENTIRE TOOL: one Python 3.10+ stdlib-only file
     ├── config.json            # project config (see below)
@@ -526,7 +528,11 @@ reduces to git's per-line merge on one small Markdown file.
 ## 9. Agent protocol
 
 Canonical text lives in `.ledger/PROTOCOL.md`; `init` maintains the same block
-in `CLAUDE.md` between `<!-- LEDGER:BEGIN/END -->` markers. Summary: session
+between `<!-- LEDGER:BEGIN/END -->` markers in every file listed in
+config.json `protocol_adapters` (default `CLAUDE.md`; `init --adapter
+AGENTS.md` adds the Codex-style discovery file — the block is host-neutral,
+and `doctor` verifies each adapter), because "agents cannot miss `next
+--claim`" only holds if the block is where each host actually looks. Summary: session
 start = `next --claim --json` + read the file + surface `questions --human`
 + `search` the symbol before implementing; while working = one intent, one
 verb (`note` a fact, `search` then `add` an obligation,

@@ -17,8 +17,9 @@ merge-conflict.
 mkdir -p .ledger && cp path/to/ledger.py .ledger/ledger.py
 
 # 2. initialize (records the coverage baseline, writes PROTOCOL.md,
-#    appends the agent protocol to CLAUDE.md, adds the LF gitattribute)
-python .ledger/ledger.py init
+#    appends the agent protocol to CLAUDE.md, adds the LF gitattribute;
+#    --adapter AGENTS.md also maintains the block for Codex-style hosts)
+python .ledger/ledger.py init --adapter AGENTS.md
 
 # 3. commit the bootstrap
 git add -A && git commit -m "Add task ledger" -m "Ledger-Exempt: ledger bootstrap"

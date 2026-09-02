@@ -93,7 +93,7 @@ CLAUDE_END = "<!-- LEDGER:END -->"
 # spot).
 TOOL_VERSION = "1.2.0"
 SCHEMA_VERSION = 1
-PROTOCOL_VERSION = 12
+PROTOCOL_VERSION = 13
 CANONICAL_SOURCE = "github.com/Sleepy9099/ledger"
 
 DEFAULT_CONFIG = {
@@ -102,6 +102,9 @@ DEFAULT_CONFIG = {
     "baseline": None,
     "stale_claim_days": 7,
     "exempt_patterns": ["^Merge ", "^Revert "],
+    # files that carry the protocol block (init --adapter AGENTS.md adds
+    # the Codex-style discovery file; the block itself is host-neutral)
+    "protocol_adapters": ["CLAUDE.md"],
 }
 # Written by init into a NEW config.json only — deliberately NOT in
 # DEFAULT_CONFIG, which would switch the policy on for every existing repo
@@ -154,7 +157,7 @@ directly with your file tools. Always pass `--json` and parse
 
 ## Session start — always
 
-1. Export a session id once: `LEDGER_SESSION=claude-<YYYY-MM-DD>-<letter>`.
+1. Export a session id once: `LEDGER_SESSION=<agent>-<YYYY-MM-DD>-<letter>`.
 2. `ledger next --claim --json` — this is your task (a bounded digest:
    open steps, HUMAN questions, dead ends, recent Log; `--full` for
    everything). Read its file (Spec, Next Steps, Open Questions) BEFORE
@@ -1693,6 +1696,8 @@ def cmd_init(args) -> int:
         atomic_write(dest_script, script.read_text(encoding="utf-8"))
 
     cfg_path = ledger_dir / "config.json"
+    wanted_adapters = [sanitize_inline(a) for a in
+                       (getattr(args, "adapter", None) or []) if a.strip()]
     if created:
         config = dict(DEFAULT_CONFIG)
         if args.prefix:
@@ -1700,18 +1705,30 @@ def cmd_init(args) -> int:
         repo = git_toplevel(ledger_dir.parent)
         config["baseline"] = git_head(repo) if repo else None
         config["exempt_allowed_paths"] = list(DEFAULT_EXEMPT_ALLOWED_PATHS)
+        config["protocol_adapters"] = list(dict.fromkeys(
+            ["CLAUDE.md"] + wanted_adapters))
         atomic_write(cfg_path, json.dumps(config, indent=2))
     else:
+        # config writes on an existing repo happen ONLY behind explicit
+        # operator flags (never as a side effect of re-vendoring)
         stored = json.loads(cfg_path.read_text(encoding="utf-8"))
+        changed = False
         if (getattr(args, "enable_exempt_policy", False)
                 and stored.get("exempt_allowed_paths") is None):
-            # the ONE config write on an existing repo, behind an explicit
-            # operator flag: forward-only from HEAD, so history stays green
+            # forward-only from HEAD, so history stays green
             stored["exempt_allowed_paths"] = list(DEFAULT_EXEMPT_ALLOWED_PATHS)
             head_repo = git_toplevel(ledger_dir.parent)
             head = git_head(head_repo) if head_repo else None
             if head:
                 stored["exempt_policy_since"] = head
+            changed = True
+        current = list(stored.get("protocol_adapters")
+                       or DEFAULT_CONFIG["protocol_adapters"])
+        new_adapters = [a for a in wanted_adapters if a not in current]
+        if new_adapters:
+            stored["protocol_adapters"] = current + new_adapters
+            changed = True
+        if changed:
             atomic_write(cfg_path, json.dumps(stored, indent=2))
         config = dict(DEFAULT_CONFIG)
         config.update(stored)
@@ -1733,19 +1750,21 @@ def cmd_init(args) -> int:
         sep = "" if (not gi_text or gi_text.endswith("\n")) else "\n"
         atomic_write(gi_path, gi_text + sep + GITIGNORE_LINE + "\n")
 
-    claude_path = root / "CLAUDE.md"
     block = f"{CLAUDE_BEGIN}\n\n{PROTOCOL_TEXT}\n{CLAUDE_END}\n"
-    if claude_path.exists():
-        text = claude_path.read_text(encoding="utf-8")
-        if CLAUDE_BEGIN in text and CLAUDE_END in text:
-            pre, rest = text.split(CLAUDE_BEGIN, 1)
-            _, post = rest.split(CLAUDE_END, 1)
-            atomic_write(claude_path, pre + block + post)
+    adapters = list(config.get("protocol_adapters") or ["CLAUDE.md"])
+    for name in adapters:
+        path = root / name
+        if path.exists():
+            text = path.read_text(encoding="utf-8")
+            if CLAUDE_BEGIN in text and CLAUDE_END in text:
+                pre, rest = text.split(CLAUDE_BEGIN, 1)
+                _, post = rest.split(CLAUDE_END, 1)
+                atomic_write(path, pre + block + post)
+            else:
+                sep = "" if text.endswith("\n") else "\n"
+                atomic_write(path, text + sep + "\n" + block)
         else:
-            sep = "" if text.endswith("\n") else "\n"
-            atomic_write(claude_path, text + sep + "\n" + block)
-    else:
-        atomic_write(claude_path, block)
+            atomic_write(path, block)
 
     baseline_note = config.get("baseline") or (
         "(none — no git history yet; ALL future commits are in "
@@ -1765,6 +1784,7 @@ def cmd_init(args) -> int:
     emit(args, True, {"ledger_dir": str(ledger_dir),
                       "baseline": config.get("baseline"),
                       "created": created, "ci_snippet": CI_SNIPPET,
+                      "adapters": adapters,
                       "exempt_policy": {
                           "active": config.get("exempt_allowed_paths") is not None,
                           "since": config.get("exempt_policy_since")}},
@@ -4126,10 +4146,11 @@ def cmd_doctor(args) -> int:
 
     root = ctx.ledger_dir.parent
     protocol_md = _read_text_if_exists(ctx.ledger_dir / "PROTOCOL.md")
-    claude_md = _read_text_if_exists(root / "CLAUDE.md")
     block = f"{CLAUDE_BEGIN}\n\n{PROTOCOL_TEXT}\n{CLAUDE_END}"
-    in_sync = {"PROTOCOL.md": protocol_md == PROTOCOL_TEXT,
-               "CLAUDE.md": claude_md is not None and block in claude_md}
+    in_sync = {"PROTOCOL.md": protocol_md == PROTOCOL_TEXT}
+    for name in (ctx.config.get("protocol_adapters") or ["CLAUDE.md"]):
+        text = _read_text_if_exists(root / str(name))
+        in_sync[str(name)] = text is not None and block in text
 
     errors: list[dict] = []
     if not compatible:
@@ -4242,6 +4263,9 @@ def build_parser() -> Parser:
 
     p = sub.add_parser("init", parents=[common], help="scaffold .ledger/")
     p.add_argument("--prefix", default=None, help="task id prefix (default T)")
+    p.add_argument("--adapter", action="append", metavar="FILE",
+                   help="also maintain the protocol block in FILE (e.g. "
+                        "AGENTS.md); repeatable; remembered in config.json")
     p.add_argument("--enable-exempt-policy", action="store_true",
                    help="on an existing repo: write the default "
                         "exempt_allowed_paths and exempt_policy_since=HEAD "
