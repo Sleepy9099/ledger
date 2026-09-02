@@ -1,12 +1,11 @@
 ---
 id: T-lbnlok
 title: sha-unreachable asks a machine-dependent question: check reachability from HEAD, not local object existence
-status: in_progress
+status: done
 priority: p1
 size: s
 created: 2026-09-02T08:54:43Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T08:54:44Z
+closed: 2026-09-02T08:56:39Z
 tags: integrity
 ---
 
@@ -29,7 +28,11 @@ tags: integrity
 
 ## Commits
 
+- e16d343 2026-09-02 sha-unreachable asks HEAD reachability, not local object existence
+
 ## Log
 
 - 2026-09-02T08:54:43Z [claude-2026-09-01-b] add: created: sha-unreachable asks a machine-dependent question: check reachability from HEAD, not local object existence [p1/s] (tags: integrity)
 - 2026-09-02T08:54:44Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T08:56:39Z [claude-2026-09-01-b] link: e16d343 sha-unreachable asks HEAD reachability, not local object existence
+- 2026-09-02T08:56:39Z [claude-2026-09-01-b] done: evidence: e16d343
