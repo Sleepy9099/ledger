@@ -618,3 +618,25 @@ def test_only_bookkeeping_paths_are_implicitly_exempt(repo):
     repo.commit_all("Re-vendor the tool", ("Ledger-Exempt: re-vendor ledger.py",))
     rc, payload = validate(repo, "--coverage")
     assert not any(e["code"] == "exempt-policy" for e in payload["errors"])
+
+
+
+def test_sha_unreachable_asks_head_reachability_not_local_existence(repo):
+    """After a history rewrite the old commit still resolves on the machine
+    that rewrote it (reflog) but in no clone; the gate must agree with the
+    clone, not with the rewriter."""
+    tid = repo.add_task("Rewritten history")
+    (repo.root / "r.py").write_text("r\n", encoding="utf-8")
+    old = repo.commit_all("Work", (f"Ledger-Task: {tid}",))
+    repo.j("link", tid, "HEAD")
+    rc, payload = validate(repo)
+    assert "sha-unreachable" not in codes(payload)
+    repo.git("commit", "-q", "--amend", "-m", "Work (amended)", "-m",
+             f"Ledger-Task: {tid}")
+    repo.git("cat-file", "-e", old)  # still in the local object store
+    rc, payload = validate(repo)
+    unreachable = [e for e in payload["errors"] if e["code"] == "sha-unreachable"]
+    assert [e["task"] for e in unreachable] == [tid]
+    assert "reachable from HEAD" in unreachable[0]["message"]
+    assert "scan --write" in unreachable[0]["fix_hint"]
+    assert repo.j("show", tid)["data"]["commits"][0]["sha"] == old[:7]

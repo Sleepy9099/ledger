@@ -652,6 +652,25 @@ def git_resolve_commit(repo: Path, ref: str) -> dict | None:
             "subject": parts[3]}
 
 
+def reachable_index(repo: Path) -> dict[str, list[str]] | None:
+    """Every commit reachable from HEAD, keyed by 7-char prefix, from ONE
+    `git rev-list HEAD`. This — not `rev-parse --verify` — is the question a
+    `## Commits` line must answer: after a history rewrite the old commits
+    still resolve on the machine that rewrote them (reflog, refs/original/*)
+    but in no clone and never in CI. None when git fails."""
+    rc, out = run_git(["rev-list", "HEAD"], repo)
+    if rc != 0:
+        return None
+    index: dict[str, list[str]] = {}
+    for sha in out.split():
+        index.setdefault(sha[:7], []).append(sha)
+    return index
+
+
+def is_reachable(index: dict[str, list[str]], sha: str) -> bool:
+    return any(full.startswith(sha) for full in index.get(sha[:7], ()))
+
+
 def git_is_shallow(repo: Path) -> bool:
     rc, out = run_git(["rev-parse", "--is-shallow-repository"], repo)
     return rc == 0 and out == "true"
@@ -3479,17 +3498,22 @@ def validate_git(ctx: Ctx, coverage: bool) -> list[dict]:
             fix_hint="fetch full history (fetch-depth: 0 in CI)"))
         return violations
 
-    # sha-unreachable: commit-cache lines that no longer resolve
-    # (independent of the history walk, so it runs even if the walk fails)
-    for task in tasks:
-        for c in task.commits():
-            if not git_sha_exists(repo, c["sha"]):
-                violations.append(err(
-                    "sha-unreachable",
-                    f"commit {c['sha']} in ## Commits does not resolve locally",
-                    task=task.id, severity="warning",
-                    fix_hint="normal after rebase/shallow clone; "
-                             "ledger scan --write re-materializes live links"))
+    # sha-unreachable: commit-cache lines not reachable from HEAD. Asked of
+    # HEAD's ancestry (one rev-list), never of the local object store, so the
+    # rewriter's checkout and every clone / CI runner give the same answer.
+    index = reachable_index(repo)
+    if index is not None:
+        for task in tasks:
+            for c in task.commits():
+                if not is_reachable(index, c["sha"]):
+                    violations.append(err(
+                        "sha-unreachable",
+                        f"commit {c['sha']} in ## Commits is not reachable "
+                        "from HEAD",
+                        task=task.id, severity="warning",
+                        fix_hint="normal after a history rewrite or a shallow "
+                                 "clone; ledger scan --write re-materializes "
+                                 "live trailer links"))
 
     commits, walk_error = walk_commits(repo, ctx.config.get("baseline"))
     if commits is None:
@@ -4050,7 +4074,8 @@ def cmd_report(args) -> int:
                     [c["sha"] for c in parent.commits()]
                     + [c.sha7 for c in commits if parent.id in c.task_ids
                        or parent.id in explicit_link_tasks(c, explicit)]))
-                cands = [s for s in cands if git_sha_exists(ctx.repo, s)]
+                index = reachable_index(ctx.repo) or {}
+                cands = [s for s in cands if is_reachable(index, s)]
                 for s in cands:
                     ancestor_of_other = any(
                         o != s and run_git(["merge-base", "--is-ancestor",

@@ -1,10 +1,12 @@
 ---
 id: T-lbnlok
 title: sha-unreachable asks a machine-dependent question: check reachability from HEAD, not local object existence
-status: todo
+status: in_progress
 priority: p1
 size: s
 created: 2026-09-02T08:54:43Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T08:54:44Z
 tags: integrity
 ---
 
@@ -30,3 +32,4 @@ tags: integrity
 ## Log
 
 - 2026-09-02T08:54:43Z [claude-2026-09-01-b] add: created: sha-unreachable asks a machine-dependent question: check reachability from HEAD, not local object existence [p1/s] (tags: integrity)
+- 2026-09-02T08:54:44Z [claude-2026-09-01-b] claim: claimed
