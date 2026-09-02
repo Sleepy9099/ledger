@@ -1,10 +1,12 @@
 ---
 id: T-w0emnj
 title: Protocol refresh: one-intent-one-verb ontology and the integration handoff
-status: todo
+status: in_progress
 priority: p2
 size: m
 created: 2026-09-01T23:48:39Z
+claimed_by: claude-2026-09-01-b
+claimed_at: 2026-09-02T01:06:46Z
 tags: protocol, docs
 ---
 
@@ -70,10 +72,10 @@ Text plus one Log-text change; no storage, header, verb, status or hook change; 
 
 ## Next Steps
 
-- [ ] Rewrite the 'While working' bullets in PROTOCOL_TEXT into the ontology block (<= 8 lines growth) and add the handoff paragraph under 'Finishing a task'
-- [ ] cmd_release --blocked: Log text 'blocked on <blocked_on> — <note>'; include blocked_on in the human line
-- [ ] Re-run init in this repo; README Daily commands (set row, --after, handoff line); DESIGN §5/§9, decision #6 note, fix the §1/§11 lock-file wording drift
-- [ ] Tests: end-to-end handoff sequence, release Log text, init wording assertions, dogfood PROTOCOL.md == PROTOCOL_TEXT
+- [x] Rewrite the 'While working' bullets in PROTOCOL_TEXT into the ontology block (<= 8 lines growth) and add the handoff paragraph under 'Finishing a task'
+- [x] cmd_release --blocked: Log text 'blocked on <blocked_on> — <note>'; include blocked_on in the human line
+- [x] Re-run init in this repo; README Daily commands (set row, --after, handoff line); DESIGN §5/§9, decision #6 note, fix the §1/§11 lock-file wording drift
+- [x] Tests: end-to-end handoff sequence, release Log text, init wording assertions, dogfood PROTOCOL.md == PROTOCOL_TEXT
 
 ## Open Questions
 
@@ -87,3 +89,9 @@ Text plus one Log-text change; no storage, header, verb, status or hook change; 
 - 2026-09-01T23:48:42Z [claude-2026-09-01-a] step: added 'Re-run init in this repo; README Daily commands (set row, --after, handoff line); DESIGN §5/§9, decision #6 note, fix the §1/§11 lock-file wording drift'
 - 2026-09-01T23:48:42Z [claude-2026-09-01-a] step: added 'Tests: end-to-end handoff sequence, release Log text, init wording assertions, dogfood PROTOCOL.md == PROTOCOL_TEXT'
 - 2026-09-02T00:06:24Z [claude-2026-09-01-a] note: Consistency pass 2026-09-01: this task now owns PROTOCOL_TEXT sequencing and a size-pin test (7 other tasks edit the same literal); ontology line names --dead-end once T-yfvuya lands; added the review §3 'correct the premise' sentence, the wave session-end qualification, and a 'closed is terminal' DESIGN sentence
+- 2026-09-02T01:06:46Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T01:15:00Z [claude-2026-09-01-b] step: checked 'Rewrite the 'While working' bullets in PROTOCOL_TEXT into the ontology block (<= 8 lines growth) and add the handoff paragraph under 'Finishing a task''
+- 2026-09-02T01:15:00Z [claude-2026-09-01-b] step: checked 'cmd_release --blocked: Log text 'blocked on <blocked_on> — <note>'; include blocked_on in the human line'
+- 2026-09-02T01:15:00Z [claude-2026-09-01-b] step: checked 'Re-run init in this repo; README Daily commands (set row, --after, handoff line); DESIGN §5/§9, decision #6 note, fix the §1/§11 lock-file wording drift'
+- 2026-09-02T01:15:00Z [claude-2026-09-01-b] step: checked 'Tests: end-to-end handoff sequence, release Log text, init wording assertions, dogfood PROTOCOL.md == PROTOCOL_TEXT'
+- 2026-09-02T01:15:00Z [claude-2026-09-01-b] note: Budget decision: the spec's 80-line/4,000-byte pin predates the seven clauses now planned for this session; the pin is set at 110 lines / 6,000 bytes (the rewritten text is 93 lines / 5.1KB) so those clauses land by replacing wording, not appending. Protocol version 4.

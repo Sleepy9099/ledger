@@ -19,6 +19,9 @@ def test_init_idempotent_and_bootstrap_files(repo):
     assert "Ledger protocol" in claude
     # the repair the protocol promises for a pushed commit is true (T-5z04ex)
     protocol = (ledger / "PROTOCOL.md").read_text(encoding="utf-8")
+    for phrase in ("--add-depends", "not the action", "ready for integration",
+                   "not scope expansion"):
+        assert phrase in protocol and phrase in claude  # T-w0emnj
     assert "ledger link <id> <sha>" in protocol
     assert "explicit link counts as coverage" in protocol
     assert "Unpushed: amend" in protocol
@@ -125,10 +128,20 @@ def test_release_handoff(repo):
     assert any(e["verb"] == "release" and "stopped at parser" in e["text"]
                for e in show["log"])
     repo.j("claim", tid)
-    repo.j("release", tid, "--blocked", "--on", "human")
+    d = repo.j("release", tid, "--blocked", "--on", "human", "--note", "x")
+    assert d["data"]["blocked_on"] == "human"
     show = repo.j("show", tid)["data"]
     assert show["header"]["status"] == "blocked"
     assert show["header"]["blocked_on"] == "human"
+    # the blocker reaches the Log (mirrors block's text), not just the header
+    assert show["log"][-1]["verb"] == "release"
+    assert show["log"][-1]["text"] == "blocked on human — x"
+    other = repo.add_task("Blocker task")
+    repo.j("unblock", tid)
+    repo.j("claim", tid)
+    repo.j("release", tid, "--blocked", "--on", other.split("-")[1])
+    show = repo.j("show", tid)["data"]
+    assert show["log"][-1]["text"] == f"blocked on {other}"  # resolved id
 
 
 def test_block_unblock_preserves_claim(repo):
@@ -375,3 +388,37 @@ def test_drop_why_with_newlines_still_parses_relation(repo):
     rel = repo.j("show", dupe)["data"]["closed_relation"]
     assert rel == {"kind": "duplicate", "target": survivor}
     assert "line one; line two" in repo.read(dupe)
+
+
+
+# --- the integration handoff convention (T-w0emnj) ---------------------------
+
+def test_integration_handoff_sequence(repo):
+    tid = repo.add_task("Worker output")
+    repo.j("claim", tid, "--session", "worker")
+    (repo.root / "feature.py").write_text("done locally\n", encoding="utf-8")
+    repo.commit_all("Implement feature", (f"Ledger-Task: {tid}",))
+    d = repo.j("release", tid, "--blocked", "--on",
+               "external: ready for integration", "--note", "suite green",
+               "--session", "worker")
+    assert d["data"]["status"] == "blocked"
+    # another worker's next never re-dispatches a handed-off task
+    n = repo.j("next", "--claim", "--session", "worker-2")["data"]
+    assert n["task"] is None
+    assert any(w["id"] == tid and "external: ready" in w["ineligible_because"]
+               for w in n["why"])
+    queue = repo.j("list", "--status", "blocked")["data"]["tasks"]
+    assert queue[0]["id"] == tid
+    assert queue[0]["blocked_on"].startswith("external: ready")
+    assert repo.j("validate", "--strict", "--no-git")["ok"]
+    # the integrator can send it back...
+    repo.j("release", tid, "--note", "integration failed: flaky",
+           "--session", "integrator")
+    assert repo.j("show", tid)["data"]["header"]["status"] == "todo"
+    # ...or close it with evidence and no --force
+    repo.j("claim", tid, "--session", "worker")
+    repo.j("release", tid, "--blocked", "--on",
+           "external: ready for integration", "--session", "worker")
+    d = repo.j("done", tid, "--commit", "HEAD", "--session", "integrator")
+    assert d["ok"]
+    assert repo.j("validate", "--strict", "--no-git")["ok"]

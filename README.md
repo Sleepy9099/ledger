@@ -76,14 +76,19 @@ python .ledger/ledger.py <command> [--json]
 
 next --claim      the agent entry point: highest-priority eligible task,
                   claimed; explains WHY if nothing is eligible
-add "title" -p p1 -s m --spec -      create a task (spec via stdin)
+add "title" -p p1 -s m --spec -      create a task (spec via stdin);
+    [--after <id>] [--tag t]         --after = scheduler-visible dependency
 show <id> | list [--status ...]      read state (any unique id fragment works)
+set <id> --priority|--size|--title   edit header fields; --add-depends /
+    |--add-depends|--remove-depends  --remove-depends keep the DAG honest
 note <id> "text"                     append a Log breadcrumb
 step <id> add|check|uncheck <n|text> manage Next Steps checkboxes
 question <id> add "..." [--human]    open a question (--human gates done)
 question <id> resolve <n> --answer   answer one
 questions --human                    everything waiting on the operator
 claim / release --note "handoff"     session start / session end
+release <id> --blocked --on "external: ready for integration" --note "..."
+                                     hand off to an integrator (PROTOCOL.md)
 block <id> --on human|T-x|external:  explicit blockage; unblock reverses
 link <id> <sha|HEAD>                 attach commit evidence
 scan --write                         reconcile git trailers -> ## Commits

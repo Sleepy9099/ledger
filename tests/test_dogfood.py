@@ -34,3 +34,25 @@ def test_ci_workflow_keeps_the_cross_platform_claim_true():
         assert runner in workflow
     for version in ('"3.10"', '"3.14"'):
         assert version in workflow
+
+
+
+def test_protocol_files_mirror_protocol_text(ledger_mod):
+    """init maintains PROTOCOL.md and the CLAUDE.md block; this repo must
+    never drift from the literal it ships."""
+    protocol = (ROOT / ".ledger" / "PROTOCOL.md").read_text(encoding="utf-8")
+    assert protocol.replace("\r\n", "\n") == ledger_mod.PROTOCOL_TEXT
+    claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    block = (f"{ledger_mod.CLAUDE_BEGIN}\n\n{ledger_mod.PROTOCOL_TEXT}\n"
+             f"{ledger_mod.CLAUDE_END}")
+    assert block in claude.replace("\r\n", "\n")
+
+
+def test_protocol_text_stays_within_its_budget(ledger_mod):
+    """The protocol block is loaded into every agent session (review §22):
+    the ceiling below already accounts for the search, brief, dead-end,
+    list --mine, options-under-questions and exemption-taxonomy clauses.
+    A later edit must REPLACE wording, not append."""
+    text = ledger_mod.PROTOCOL_TEXT
+    assert text.count("\n") <= 110, text.count("\n")
+    assert len(text.encode("utf-8")) <= 6000, len(text.encode("utf-8"))

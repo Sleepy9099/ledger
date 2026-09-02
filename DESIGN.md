@@ -46,9 +46,10 @@ repo-root/
 **Bootstrap** = copy `.ledger/ledger.py` into a repo, run
 `python .ledger/ledger.py init`, commit.
 
-**Deliberately absent:** index/cache files, counters, lock files, a global
-event log, an `archive/` directory, git hooks. Every piece of mutable state is
-either a per-task file or git history itself.
+**Deliberately absent:** index/cache files, counters, lock files as state, a
+global event log, an `archive/` directory, git hooks. Every piece of mutable
+state is either a per-task file or git history itself (the gitignored
+`.ledger/.lock` of §7(g) is a transient OS mutex that holds no state).
 
 `config.json`:
 
@@ -228,6 +229,15 @@ Notable semantics:
   strip another session's *fresh* claim without `--force` (stale claims are
   fair game). Claims stay advisory across branches — this guards only the
   shared-checkout case.
+- The integration handoff is a convention, not a status: a worker that has
+  finished but does not own closing runs `release --blocked --on "external:
+  ready for integration" --note "..."` — the claim is stripped (so the
+  integrator's `done --commit` needs no `--force`), `next` skips it with a
+  `blocked_on external:` why, `list --status blocked` is the integrator
+  queue, and a plain `release --note` sends it back to todo. `release
+  --blocked` writes `blocked on <blocked_on> — <note>` to the Log so the
+  reason survives a later unblock/drop. The protocol's "never work on a
+  task you haven't claimed" reads "claimed or handed to you".
 - Section bodies are parsed fence-aware: `## ` lines inside ``` code fences
   are content, so specs may safely quote task-file examples. Unfenced `## `
   lines in CLI-supplied spec text are rejected at input (use `###` inside
@@ -349,10 +359,16 @@ reduces to git's per-line merge on one small Markdown file.
 Canonical text lives in `.ledger/PROTOCOL.md`; `init` maintains the same block
 in `CLAUDE.md` between `<!-- LEDGER:BEGIN/END -->` markers. Summary: session
 start = `next --claim --json` + read the file + surface `questions --human`;
-while working = `add` discovered work, `note` breadcrumbs, trailer every
-commit; finish = `done --commit HEAD` (respect refusals); session end =
-`release --note` + `validate --coverage --strict` and fix what you caused;
-never hand-edit headers/Commits/Log, never mint ids, never delete task files.
+while working = one intent, one verb (`note` a fact, `add` an obligation,
+`--after` / `--add-depends` an ordering, `block` a blocker, `question
+--human` a decision, `drop --duplicate-of` a duplicate — a note asking a
+future session to act is not the action), trailer every commit; finish =
+`done --commit HEAD` (respect refusals) or hand off with `release --blocked
+--on "external: ready for integration"`; session end = `release --note` +
+`validate --coverage --strict` and fix what you caused; never hand-edit
+headers/Commits/Log, never mint ids, never delete task files. The
+always-loaded protocol block is size-pinned by a test so every later edit
+replaces wording rather than appends.
 
 ## 10. Testing strategy
 
@@ -374,7 +390,8 @@ never hand-edit headers/Commits/Log, never mint ids, never delete task files.
 ## 11. Deliberately left out
 
 Archive directories (rename/edit conflicts), global NDJSON event logs
-(every-merge conflict magnet), index/counter/lock files and daemons, git hooks
+(every-merge conflict magnet), index/counter files, lock files as state (the
+§7(g) mutex holds none) and daemons, git hooks
 (don't survive clone; CI validate is the layer), `merge=union` drivers,
 epics/sprints/due-dates/velocity (PM features that rot and invite gaming),
 evidence-token vocabularies (commits carry their tests), an `updated` field,
@@ -397,7 +414,11 @@ spec-editing CLI commands (agents edit prose better with their own tools).
 5. **Header lists:** bare comma-separated — smallest parser, no dialect for
    agents to get wrong.
 6. **Status enum:** todo | in_progress | blocked | done | dropped; a `review`
-   state was cut (no reviewer role in scope).
+   state was cut (no reviewer role in scope). Reconsidered 2026-09-01 after
+   the first multi-agent wave review asked for `ready_for_integration`:
+   stays cut, because `release --blocked --on "external: ready for
+   integration"` already yields the handoff state with no schema change
+   (§5); forgotten handoffs age via `stale-block` instead.
 7. **No `updated` field** — guaranteed 1-line conflict on every concurrent
    edit; derived from claimed_at + newest Log line instead.
 8. **History model:** per-task append-only `## Log` (last section) + git
@@ -414,6 +435,8 @@ spec-editing CLI commands (agents edit prose better with their own tools).
     shrinks the guarantee.
 12. **Close verb:** `done` (mirrors the status value exactly — one less name
     to remember; enum-verb symmetry beat 2-of-3 majority for `close`).
+    Closed is terminal: done/dropped are refused by every mutating verb; a
+    regression or redo is a new task (search first).
 13. **Done evidence:** ≥1 linked commit OR `--no-code "reason"`; a pytest
     node-id evidence vocabulary was cut (commits carry their tests).
 14. **Session identity:** flag > env > git user.name — a mandatory per-write
