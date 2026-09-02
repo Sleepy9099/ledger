@@ -1,12 +1,11 @@
 ---
 id: T-yfvuya
 title: note --dead-end: machine-selectable negative-knowledge marker
-status: in_progress
+status: done
 priority: p2
 size: xs
 created: 2026-09-01T23:48:39Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T01:15:18Z
+closed: 2026-09-02T01:20:45Z
 tags: memory
 ---
 
@@ -51,6 +50,8 @@ Older copies parse, round-trip and tamper-protect the line; they reject only the
 
 ## Commits
 
+- 703cd3e 2026-09-01 Add note --dead-end: a machine-selectable negative-knowledge marker
+
 ## Log
 
 - 2026-09-01T23:48:39Z [claude-2026-09-01-a] add: created: note --dead-end: machine-selectable negative-knowledge marker
@@ -68,3 +69,5 @@ Older copies parse, round-trip and tamper-protect the line; they reject only the
 - 2026-09-02T01:20:31Z [claude-2026-09-01-b] step: checked 'note subparser --dead-end; cmd_note passes note(dead-end); data.verb'
 - 2026-09-02T01:20:31Z [claude-2026-09-01-b] step: checked 'DESIGN §2 verb list, PROTOCOL_TEXT 'dead ends especially' line (re-run init), README note line'
 - 2026-09-02T01:20:31Z [claude-2026-09-01-b] step: checked 'Tests: cli (new fixture), format round-trip, log-tamper, property, validate strict'
+- 2026-09-02T01:20:45Z [claude-2026-09-01-b] link: 703cd3e Add note --dead-end: a machine-selectable negative-knowledge marker
+- 2026-09-02T01:20:45Z [claude-2026-09-01-b] done: evidence: 703cd3e
