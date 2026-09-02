@@ -1,12 +1,11 @@
 ---
 id: T-h0o5hu
 title: Control bytes: reject in inputs, flag in validate, treat binary diffs as tamper
-status: in_progress
+status: done
 priority: p1
 size: xs
 created: 2026-09-02T11:44:57Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T11:48:03Z
+closed: 2026-09-02T11:53:15Z
 tags: integrity
 ---
 
@@ -29,7 +28,11 @@ A NUL byte in a task file makes git classify it as binary; `git log -p` / `diff`
 
 ## Commits
 
+- 5aa53ca 2026-09-02 Control bytes: stripped on input, flagged by validate, binary diffs are tamper
+
 ## Log
 
 - 2026-09-02T11:44:57Z [claude-2026-09-01-b] add: created: Control bytes: reject in inputs, flag in validate, treat binary diffs as tamper [p1/xs] (tags: integrity)
 - 2026-09-02T11:48:03Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T11:53:15Z [claude-2026-09-01-b] link: 5aa53ca Control bytes: stripped on input, flagged by validate, binary diffs are tamper
+- 2026-09-02T11:53:15Z [claude-2026-09-01-b] done: evidence: 5aa53ca
