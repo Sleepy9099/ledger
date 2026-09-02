@@ -1,12 +1,11 @@
 ---
 id: T-jqulvk
 title: Batch git subprocess calls in validate
-status: in_progress
+status: done
 priority: p3
 size: s
 created: 2026-08-28T03:02:19Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T12:30:32Z
+closed: 2026-09-02T12:32:22Z
 tags: performance
 ---
 
@@ -20,6 +19,8 @@ validate spawns one 'git rev-parse' per cached ## Commits line (sha-unreachable)
 
 ## Commits
 
+- 5255a6a 2026-09-02 Batch git subprocess calls: memoized repo root, one name-status pass
+
 ## Log
 
 - 2026-08-28T03:02:19Z [claude-2026-08-27-a] add: created: Batch git subprocess calls in validate
@@ -29,3 +30,5 @@ validate spawns one 'git rev-parse' per cached ## Commits line (sha-unreachable)
 - 2026-09-02T11:25:18Z [claude-2026-09-01-b] unblock: -> todo
 - 2026-09-02T11:25:31Z [claude-2026-09-01-b] note: Correction to the previous note (a shell quoting slip dropped the command): the batch pass is: git log --cc --name-only --format=%x01%H <baseline>..HEAD (root commits show their full file list; merge commits list only combined-diff files), parsed once into a sha -> files map cached on the walk.
 - 2026-09-02T12:30:32Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T12:32:22Z [claude-2026-09-01-b] link: 5255a6a Batch git subprocess calls: memoized repo root, one name-status pass
+- 2026-09-02T12:32:22Z [claude-2026-09-01-b] done: evidence: 5255a6a
