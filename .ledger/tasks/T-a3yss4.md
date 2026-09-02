@@ -1,12 +1,11 @@
 ---
 id: T-a3yss4
 title: ledger repair: journaled header repair for merge/hand-edit incoherence, with state-coherence fix_hints
-status: in_progress
+status: done
 priority: p1
 size: s
 created: 2026-09-02T11:44:58Z
-claimed_by: claude-2026-09-01-b
-claimed_at: 2026-09-02T11:58:53Z
+closed: 2026-09-02T12:02:17Z
 tags: integrity, ergonomics
 ---
 
@@ -29,7 +28,11 @@ Five state-coherence errors (claim fields on a closed task, missing/extra closed
 
 ## Commits
 
+- c3745e3 2026-09-02 ledger repair: journaled header repair with state-coherence hints
+
 ## Log
 
 - 2026-09-02T11:44:58Z [claude-2026-09-01-b] add: created: ledger repair: journaled header repair for merge/hand-edit incoherence, with state-coherence fix_hints [p1/s] (tags: integrity, ergonomics)
 - 2026-09-02T11:58:53Z [claude-2026-09-01-b] claim: claimed
+- 2026-09-02T12:02:16Z [claude-2026-09-01-b] link: c3745e3 ledger repair: journaled header repair with state-coherence hints
+- 2026-09-02T12:02:17Z [claude-2026-09-01-b] done: evidence: c3745e3
