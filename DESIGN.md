@@ -262,6 +262,12 @@ Commands: `init`, `add`, `list`, `show`, `next [--claim]`, `claim [--force]`,
 `question add|resolve`, `questions [--human]`, `block --on` / `unblock`,
 `link`, `scan [--write]`, `done [--commit|--no-code|--force]`, `drop --why`,
 `validate [--coverage] [--strict] [--no-git]`, `doctor`, `search`,
+`log [--since|--until|--actor|--task|--verb|--tag|-n]` (operator
+diagnostics, decision #27: every parsed Log line across the corpus as
+`{ts, actor, verb, text, task, title, status}`, newest first by timestamp
+— ties by task id then file order — capped at 50 by default with the
+uniform `truncated` key, `-n 0` for everything; derived on read, never
+stored, out of PROTOCOL_TEXT),
 `report [--since|--until|--tag|--task|--actor|--no-git]` (operator
 diagnostics: every figure derived on each call from headers, Log lines and
 the trailer walk, nothing stored — §11's "rots" objection answered; with
@@ -738,3 +744,15 @@ deterministic token-overlap hint; a model's opinion must never gate CI).
     lines, `list --mine`, `next.held` and `report` instead. Revisit only if
     a wave shows commits landing against unclaimed-but-once-claimed tasks;
     then a window check at `info` tier before any trailer.
+27. **`log` is a corpus-wide read, and the review UI lives outside the
+    vendored file** (decided 2026-10-01). A human review UI (`ui/`, its
+    own `ledger-ui` package with GUI dependencies) needs a cross-task
+    timeline; one `show` per task costs minutes on a 1,000-task corpus, so
+    1.6.0 adds `log` as one O(n) read with the same never-stored,
+    out-of-protocol standing as `report`. The UI never parses or writes
+    task Markdown: it runs the TARGET repo's own vendored `ledger.py` with
+    `--json` and renders the envelope, so it can never disagree with the
+    copy that governs that repo, and anything it cannot do through the CLI
+    it does not do. `init` and the root package are untouched — the UI is
+    never vendored. Pre-1.6.0 copies answer `log` with argparse exit 3 and
+    no envelope; the UI gates the view on `doctor`'s `tool_version`.

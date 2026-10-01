@@ -1,0 +1,32 @@
+---
+id: T-d1ai7q
+title: ledger-ui: Activity timeline on ledger log
+status: todo
+priority: p2
+size: s
+created: 2026-10-01T22:31:29Z
+depends_on: T-sl1bow, T-9jnibd
+tags: ui
+---
+
+## Spec
+
+### Intent
+
+Activity timeline in the review UI, built on the 1.6.0 `ledger log --json` command (one subprocess call for the whole corpus). Hidden, with an explanatory note, on checkouts whose vendored copy is older than 1.6.0.
+
+### Design
+
+- Day-grouped timeline, newest first: actor, verb (claim / done / note(dead-end) / block / release / question ...), task link, text.
+- Filters: actor (OSBF has 100+ worker ids, so a searchable select plus a prefix grouping like `w-*`), verb, task, tag, time window.
+- Paged with `-n` and a "load more" that widens the window; clicking a task opens the shared inspector.
+
+## Next Steps
+
+## Open Questions
+
+## Commits
+
+## Log
+
+- 2026-10-01T22:31:29Z [claude-2026-10-01-a] add: created: ledger-ui: Activity timeline on ledger log [p2/s] (after: T-sl1bow, T-9jnibd) (tags: ui)

@@ -200,6 +200,15 @@ level and `sources` says which are lower bounds. It is deliberately absent
 from the agent protocol and from "Daily commands": it never feeds `next`,
 `done` or `validate`.
 
+`ledger log [--since TS|REF] [--until TS|REF] [--actor NAME] [--task ID]
+[--verb VERB]... [--tag TAG] [-n N] --json` is the corpus-wide event
+stream: every Log line as `{ts, actor, verb, text, task, title, status}`,
+newest first, capped at 50 rows unless `-n` says otherwise (`-n 0` = all;
+a cut is reported under `truncated`). It is one read where a timeline
+would otherwise need a `show` per task, and it has `report`'s standing:
+derived on each call, never stored, never fed to `next`, `done` or
+`validate`.
+
 ## Resource leases (advisory)
 
 Tag a task `resource:<slug>` (`add ... --tag resource:gpu`, or

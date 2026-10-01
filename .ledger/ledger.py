@@ -4430,6 +4430,67 @@ def cmd_search(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# log: the corpus-wide Log event stream (operator diagnostics)
+#
+# One read for what would otherwise be a `show` per task. Derived on read
+# like `report`: nothing stored, never fed to next / done / validate, kept
+# out of PROTOCOL_TEXT. Same honest-agent trust level as the Log itself.
+# ---------------------------------------------------------------------------
+
+LOG_DEFAULT_N = 50
+
+
+def cmd_log(args) -> int:
+    ctx = make_ctx(args)  # read-only, lock-free
+    use_git = ctx.repo is not None
+    since = _window_bound(ctx, args.since, use_git)
+    until = _window_bound(ctx, args.until, use_git)
+    tasks, problems = load_all_tasks(ctx)
+    population = tasks
+    scope: dict = {}
+    if args.task:
+        only = _resolve_fragment(tasks, args.task)
+        population = [only]
+        scope["task"] = only.id
+    if args.tag:
+        population = [t for t in population if args.tag in t.tags]
+        scope["tag"] = args.tag
+    verbs = set(args.verb or [])
+    rows = []
+    for task in population:
+        for pos, e in enumerate(task.log()):
+            if since is not None and e["ts"] < since:
+                continue
+            if until is not None and e["ts"] > until:
+                continue
+            if args.actor and e["actor"] != args.actor:
+                continue
+            if verbs and e["verb"] not in verbs:
+                continue
+            rows.append((e["ts"], task.id, pos, {
+                **e, "task": task.id, "title": task.title,
+                "status": task.status}))
+    # newest first by TIMESTAMP (Log lines are order-insensitive under
+    # merges); ties fall back to task id, then file order, so output is stable
+    rows.sort(key=lambda r: (r[1], r[2]))
+    rows.sort(key=lambda r: r[0], reverse=True)
+    events = [r[3] for r in rows]
+    count = len(events)
+    limit = None if args.n == 0 else max(args.n, 0)
+    events, cut = bounded(events, limit, "ledger log -n 0 (or narrow with "
+                          "--since/--until/--actor/--task/--verb)")
+    data: dict = {"window": {"since": since, "until": until},
+                  "scope": scope, "verbs": sorted(verbs), "count": count,
+                  "events": events}
+    if cut:
+        data["truncated"] = {"events": cut}
+    human = [f"{e['ts']}  {e['actor']}  {e['task']}  {e['verb']}: {e['text']}"
+             for e in events] or ["no Log events match"]
+    human.extend(truncation_lines(data.get("truncated", {})))
+    return emit_read(args, data, problems, human)
+
+
+# ---------------------------------------------------------------------------
 # report: derived, never-stored wave / backlog metrics (operator diagnostics)
 #
 # Every figure is recomputed from headers, Log lines and the trailer walk on
@@ -5277,6 +5338,23 @@ def build_parser() -> Parser:
                    help="open statuses only (default: every status)")
     p.add_argument("-n", type=int, default=20, help="max rows (default 20)")
     p.set_defaults(fn=cmd_search)
+
+    p = sub.add_parser("log", parents=[common],
+                       help="corpus-wide Log event stream, newest first "
+                            "(operator diagnostics; never stored)")
+    p.add_argument("--since", metavar="TS|REF",
+                   help="YYYY-MM-DD, UTC Z timestamp, or git ref (committer "
+                        "time); inclusive")
+    p.add_argument("--until", metavar="TS|REF", help="inclusive")
+    p.add_argument("--actor", help="only this actor's Log lines")
+    p.add_argument("--task", metavar="ID", help="only this task's Log")
+    p.add_argument("--verb", action="append",
+                   help="only this verb, e.g. claim, done, note(dead-end) "
+                        "(repeatable)")
+    p.add_argument("--tag", help="only tasks carrying TAG")
+    p.add_argument("-n", type=int, default=LOG_DEFAULT_N,
+                   help=f"max rows (default {LOG_DEFAULT_N}; 0 = all)")
+    p.set_defaults(fn=cmd_log)
 
     p = sub.add_parser("report", parents=[common],
                        help="operator diagnostics: derived wave / backlog "
