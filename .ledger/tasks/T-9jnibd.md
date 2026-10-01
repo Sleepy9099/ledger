@@ -1,12 +1,11 @@
 ---
 id: T-9jnibd
 title: ledger log: corpus-wide read-only Log event stream
-status: in_progress
+status: done
 priority: p1
 size: m
 created: 2026-10-01T22:31:28Z
-claimed_by: claude-2026-10-01-a
-claimed_at: 2026-10-01T22:31:29Z
+closed: 2026-10-01T22:34:45Z
 tags: cli, operator
 ---
 
@@ -43,6 +42,8 @@ Lands in 1.6.0 (TOOL_VERSION + pyproject); the protocol text is unchanged, so PR
 
 ## Commits
 
+- 7e87144 2026-10-01 Add ledger log: corpus-wide read-only Log event stream
+
 ## Log
 
 - 2026-10-01T22:31:28Z [claude-2026-10-01-a] add: created: ledger log: corpus-wide read-only Log event stream [p1/m] (tags: cli, operator)
@@ -56,3 +57,5 @@ Lands in 1.6.0 (TOOL_VERSION + pyproject); the protocol text is unchanged, so PR
 - 2026-10-01T22:34:44Z [claude-2026-10-01-a] step: checked 'DESIGN.md §5 + README command docs'
 - 2026-10-01T22:34:44Z [claude-2026-10-01-a] step: checked 'Bump TOOL_VERSION/pyproject to 1.6.0 -- MOOT: the bump ships under T-j4rolv (release task)'
 - 2026-10-01T22:34:45Z [claude-2026-10-01-a] note: REAI2 (1,132 tasks, 11,028 Log lines): log -n 0 --json in ~0.5s vs one show per task (~350ms each).
+- 2026-10-01T22:34:45Z [claude-2026-10-01-a] link: 7e87144 Add ledger log: corpus-wide read-only Log event stream
+- 2026-10-01T22:34:45Z [claude-2026-10-01-a] done: evidence: 7e87144

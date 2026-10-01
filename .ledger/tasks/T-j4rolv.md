@@ -1,10 +1,12 @@
 ---
 id: T-j4rolv
 title: Release 1.6.0 and re-vendor into OSBF, REAI2, recurrent_moe_expert
-status: todo
+status: in_progress
 priority: p2
 size: s
 created: 2026-10-01T22:31:28Z
+claimed_by: claude-2026-10-01-a
+claimed_at: 2026-10-01T22:35:07Z
 depends_on: T-9jnibd
 tags: release
 ---
@@ -29,6 +31,11 @@ The human asked for this to be done by the agent (2026-10-01).
 
 ## Next Steps
 
+- [x] Bump TOOL_VERSION + pyproject to 1.6.0
+- [ ] Re-vendor recurrent_moe_expert
+- [ ] Re-vendor REAI2
+- [ ] Re-vendor OSBF
+
 ## Open Questions
 
 ## Commits
@@ -36,3 +43,9 @@ The human asked for this to be done by the agent (2026-10-01).
 ## Log
 
 - 2026-10-01T22:31:28Z [claude-2026-10-01-a] add: created: Release 1.6.0 and re-vendor into OSBF, REAI2, recurrent_moe_expert [p2/s] (after: T-9jnibd) (tags: release)
+- 2026-10-01T22:35:07Z [claude-2026-10-01-a] claim: claimed
+- 2026-10-01T22:35:07Z [claude-2026-10-01-a] step: added 'Bump TOOL_VERSION + pyproject to 1.6.0'
+- 2026-10-01T22:35:07Z [claude-2026-10-01-a] step: added 'Re-vendor recurrent_moe_expert'
+- 2026-10-01T22:35:08Z [claude-2026-10-01-a] step: added 'Re-vendor REAI2'
+- 2026-10-01T22:35:08Z [claude-2026-10-01-a] step: added 'Re-vendor OSBF'
+- 2026-10-01T22:35:20Z [claude-2026-10-01-a] step: checked 'Bump TOOL_VERSION + pyproject to 1.6.0'
