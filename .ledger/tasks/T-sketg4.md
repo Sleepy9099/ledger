@@ -1,12 +1,11 @@
 ---
 id: T-sketg4
 title: ledger-ui: full dependency graph with load-more
-status: in_progress
+status: done
 priority: p2
 size: m
 created: 2026-10-01T22:31:29Z
-claimed_by: claude-2026-10-01-a
-claimed_at: 2026-10-01T22:54:12Z
+closed: 2026-10-01T22:54:35Z
 depends_on: T-sl1bow
 tags: ui
 ---
@@ -31,8 +30,12 @@ Dependency graph view in the review UI. The human wants the FULL graph (or at le
 
 ## Commits
 
+- ea4fb61 2026-10-01 Add ledger-ui: a read-only review UI for any number of ledgers
+
 ## Log
 
 - 2026-10-01T22:31:29Z [claude-2026-10-01-a] add: created: ledger-ui: full dependency graph with load-more [p2/m] (after: T-sl1bow) (tags: ui)
 - 2026-10-01T22:54:12Z [claude-2026-10-01-a] claim: claimed
 - 2026-10-01T22:54:24Z [claude-2026-10-01-a] note: Real shapes: OSBF open scope = 153 nodes / 293 edges / 23 layers (hubs with out-degree 15-17); REAI2 = 93 nodes / 43 edges / 4 layers. Longest-path layering piled sources into column 0 with long edges; sources now sit one column left of their earliest dependent.
+- 2026-10-01T22:54:35Z [claude-2026-10-01-a] link: ea4fb61 Add ledger-ui: a read-only review UI for any number of ledgers
+- 2026-10-01T22:54:35Z [claude-2026-10-01-a] done: evidence: ea4fb61

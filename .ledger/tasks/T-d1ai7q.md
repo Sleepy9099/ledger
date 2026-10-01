@@ -1,12 +1,11 @@
 ---
 id: T-d1ai7q
 title: ledger-ui: Activity timeline on ledger log
-status: in_progress
+status: done
 priority: p2
 size: s
 created: 2026-10-01T22:31:29Z
-claimed_by: claude-2026-10-01-a
-claimed_at: 2026-10-01T22:54:12Z
+closed: 2026-10-01T22:54:36Z
 depends_on: T-sl1bow, T-9jnibd
 tags: ui
 ---
@@ -29,7 +28,11 @@ Activity timeline in the review UI, built on the 1.6.0 `ledger log --json` comma
 
 ## Commits
 
+- ea4fb61 2026-10-01 Add ledger-ui: a read-only review UI for any number of ledgers
+
 ## Log
 
 - 2026-10-01T22:31:29Z [claude-2026-10-01-a] add: created: ledger-ui: Activity timeline on ledger log [p2/s] (after: T-sl1bow, T-9jnibd) (tags: ui)
 - 2026-10-01T22:54:12Z [claude-2026-10-01-a] claim: claimed
+- 2026-10-01T22:54:36Z [claude-2026-10-01-a] link: ea4fb61 Add ledger-ui: a read-only review UI for any number of ledgers
+- 2026-10-01T22:54:36Z [claude-2026-10-01-a] done: evidence: ea4fb61

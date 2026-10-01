@@ -1,12 +1,11 @@
 ---
 id: T-z76xh6
 title: ledger-ui: scaffold, LedgerClient adapter, project registry, worktrees
-status: in_progress
+status: done
 priority: p1
 size: m
 created: 2026-10-01T22:31:28Z
-claimed_by: claude-2026-10-01-a
-claimed_at: 2026-10-01T22:37:07Z
+closed: 2026-10-01T22:54:35Z
 tags: ui
 ---
 
@@ -46,6 +45,8 @@ A human-facing review UI for any repo's ledger, living in this repo under `ui/` 
 
 ## Commits
 
+- ea4fb61 2026-10-01 Add ledger-ui: a read-only review UI for any number of ledgers
+
 ## Log
 
 - 2026-10-01T22:31:28Z [claude-2026-10-01-a] add: created: ledger-ui: scaffold, LedgerClient adapter, project registry, worktrees [p1/m] (tags: ui)
@@ -63,3 +64,5 @@ A human-facing review UI for any repo's ledger, living in this repo under `ui/` 
 - 2026-10-01T22:54:24Z [claude-2026-10-01-a] step: checked 'app shell: header, nav, project/checkout switcher, --native'
 - 2026-10-01T22:54:24Z [claude-2026-10-01-a] step: checked 'ui/tests green'
 - 2026-10-01T22:54:24Z [claude-2026-10-01-a] note(dead-end): NiceGUI 3.17 gotchas: (1) ui.echart sized before the page layout settles draws nothing until run_chart_method('resize'); (2) ui.markdown extras are a plain list, so markdown2 'breaks' (needs on_newline) is a no-op: join lines with two-space hard breaks; use 'code-friendly' or snake_case paths italicize; (3) ui.timer(once) from a page-build path never fired under the simulated test user; background_tasks.create does.
+- 2026-10-01T22:54:35Z [claude-2026-10-01-a] link: ea4fb61 Add ledger-ui: a read-only review UI for any number of ledgers
+- 2026-10-01T22:54:35Z [claude-2026-10-01-a] done: evidence: ea4fb61

@@ -1,12 +1,11 @@
 ---
 id: T-sl1bow
 title: ledger-ui: Projects, Overview, Work + inspector, Human Inbox, Validation
-status: in_progress
+status: done
 priority: p1
 size: l
 created: 2026-10-01T22:31:29Z
-claimed_by: claude-2026-10-01-a
-claimed_at: 2026-10-01T22:54:12Z
+closed: 2026-10-01T22:54:35Z
 depends_on: T-z76xh6
 tags: ui
 ---
@@ -35,7 +34,11 @@ Dark/light aware, dense but calm; status/priority colour coding consistent acros
 
 ## Commits
 
+- ea4fb61 2026-10-01 Add ledger-ui: a read-only review UI for any number of ledgers
+
 ## Log
 
 - 2026-10-01T22:31:29Z [claude-2026-10-01-a] add: created: ledger-ui: Projects, Overview, Work + inspector, Human Inbox, Validation [p1/l] (after: T-z76xh6) (tags: ui)
 - 2026-10-01T22:54:12Z [claude-2026-10-01-a] claim: claimed
+- 2026-10-01T22:54:35Z [claude-2026-10-01-a] link: ea4fb61 Add ledger-ui: a read-only review UI for any number of ledgers
+- 2026-10-01T22:54:35Z [claude-2026-10-01-a] done: evidence: ea4fb61
