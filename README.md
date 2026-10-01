@@ -209,6 +209,16 @@ would otherwise need a `show` per task, and it has `report`'s standing:
 derived on each call, never stored, never fed to `next`, `done` or
 `validate`.
 
+### Review UI (for humans; never vendored)
+
+[ui/](ui/) is a separate, read-only browser/desktop UI over any number of
+ledgers: per project an attention overview, a filterable task table with
+an inspector, the Human Inbox, the dependency graph, the activity timeline
+(needs 1.6.0's `log`) and validation. It has GUI dependencies, so it is
+its own package (`pip install -e ui`, then `ledger-ui add <repo>` and
+`ledger-ui`); `init` never copies it. It runs each repo's own vendored
+`ledger.py` and only renders the JSON envelopes. See [ui/README.md](ui/README.md).
+
 ## Resource leases (advisory)
 
 Tag a task `resource:<slug>` (`add ... --tag resource:gpu`, or
@@ -342,3 +352,5 @@ the tool's own roadmap).
   times faster — every test owns a temp repo): format round-trips, CLI
   contract, one fixture per validation code, real-git merge scenarios, and
   an anti-corruption property test
+- [ui/](ui/) — the human review UI (its own package and test suite; not
+  vendored)

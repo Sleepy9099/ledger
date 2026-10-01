@@ -1,10 +1,12 @@
 ---
 id: T-z76xh6
 title: ledger-ui: scaffold, LedgerClient adapter, project registry, worktrees
-status: todo
+status: in_progress
 priority: p1
 size: m
 created: 2026-10-01T22:31:28Z
+claimed_by: claude-2026-10-01-a
+claimed_at: 2026-10-01T22:37:07Z
 tags: ui
 ---
 
@@ -33,6 +35,13 @@ A human-facing review UI for any repo's ledger, living in this repo under `ui/` 
 
 ## Next Steps
 
+- [x] ui/pyproject.toml + README; .venv ignored
+- [x] client.py: read-only LedgerClient + Capabilities
+- [x] projects.py: user-level registry + worktree discovery
+- [x] store.py: stamp-keyed cache, concurrent fetch, background validate
+- [x] app shell: header, nav, project/checkout switcher, --native
+- [x] ui/tests green
+
 ## Open Questions
 
 ## Commits
@@ -40,3 +49,17 @@ A human-facing review UI for any repo's ledger, living in this repo under `ui/` 
 ## Log
 
 - 2026-10-01T22:31:28Z [claude-2026-10-01-a] add: created: ledger-ui: scaffold, LedgerClient adapter, project registry, worktrees [p1/m] (tags: ui)
+- 2026-10-01T22:37:07Z [claude-2026-10-01-a] claim: claimed
+- 2026-10-01T22:37:08Z [claude-2026-10-01-a] step: added 'ui/pyproject.toml + README; .venv ignored'
+- 2026-10-01T22:37:09Z [claude-2026-10-01-a] step: added 'client.py: read-only LedgerClient + Capabilities'
+- 2026-10-01T22:37:09Z [claude-2026-10-01-a] step: added 'projects.py: user-level registry + worktree discovery'
+- 2026-10-01T22:37:10Z [claude-2026-10-01-a] step: added 'store.py: stamp-keyed cache, concurrent fetch, background validate'
+- 2026-10-01T22:37:10Z [claude-2026-10-01-a] step: added 'app shell: header, nav, project/checkout switcher, --native'
+- 2026-10-01T22:37:11Z [claude-2026-10-01-a] step: added 'ui/tests green'
+- 2026-10-01T22:54:23Z [claude-2026-10-01-a] step: checked 'ui/pyproject.toml + README; .venv ignored'
+- 2026-10-01T22:54:23Z [claude-2026-10-01-a] step: checked 'client.py: read-only LedgerClient + Capabilities'
+- 2026-10-01T22:54:23Z [claude-2026-10-01-a] step: checked 'projects.py: user-level registry + worktree discovery'
+- 2026-10-01T22:54:23Z [claude-2026-10-01-a] step: checked 'store.py: stamp-keyed cache, concurrent fetch, background validate'
+- 2026-10-01T22:54:24Z [claude-2026-10-01-a] step: checked 'app shell: header, nav, project/checkout switcher, --native'
+- 2026-10-01T22:54:24Z [claude-2026-10-01-a] step: checked 'ui/tests green'
+- 2026-10-01T22:54:24Z [claude-2026-10-01-a] note(dead-end): NiceGUI 3.17 gotchas: (1) ui.echart sized before the page layout settles draws nothing until run_chart_method('resize'); (2) ui.markdown extras are a plain list, so markdown2 'breaks' (needs on_newline) is a no-op: join lines with two-space hard breaks; use 'code-friendly' or snake_case paths italicize; (3) ui.timer(once) from a page-build path never fired under the simulated test user; background_tasks.create does.

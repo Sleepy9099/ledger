@@ -37,3 +37,22 @@ jobs:
         run: python -m pip install --upgrade pip pytest pytest-xdist
       - name: Run the suite (every test owns a tmp repo, so it parallelizes)
         run: python -m pytest -n auto
+
+  ui:
+    # The review UI is its own package (never vendored); its suite drives a
+    # temp ledger through this repo's .ledger/ledger.py.
+    name: ui (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the UI package
+        run: python -m pip install --upgrade pip && python -m pip install -e "ui[dev]"
+      - name: Run the UI suite
+        run: python -m pytest ui/tests
