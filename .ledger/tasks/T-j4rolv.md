@@ -1,12 +1,11 @@
 ---
 id: T-j4rolv
 title: Release 1.6.0 and re-vendor into OSBF, REAI2, recurrent_moe_expert
-status: in_progress
+status: done
 priority: p2
 size: s
 created: 2026-10-01T22:31:28Z
-claimed_by: claude-2026-10-01-a
-claimed_at: 2026-10-01T22:35:07Z
+closed: 2026-10-01T22:37:00Z
 depends_on: T-9jnibd
 tags: release
 ---
@@ -32,13 +31,15 @@ The human asked for this to be done by the agent (2026-10-01).
 ## Next Steps
 
 - [x] Bump TOOL_VERSION + pyproject to 1.6.0
-- [ ] Re-vendor recurrent_moe_expert
-- [ ] Re-vendor REAI2
-- [ ] Re-vendor OSBF
+- [x] Re-vendor recurrent_moe_expert
+- [x] Re-vendor REAI2
+- [x] Re-vendor OSBF
 
 ## Open Questions
 
 ## Commits
+
+- fbe399a 2026-10-01 Release 1.6.0: ledger log; record closure of T-9jnibd
 
 ## Log
 
@@ -49,3 +50,9 @@ The human asked for this to be done by the agent (2026-10-01).
 - 2026-10-01T22:35:08Z [claude-2026-10-01-a] step: added 'Re-vendor REAI2'
 - 2026-10-01T22:35:08Z [claude-2026-10-01-a] step: added 'Re-vendor OSBF'
 - 2026-10-01T22:35:20Z [claude-2026-10-01-a] step: checked 'Bump TOOL_VERSION + pyproject to 1.6.0'
+- 2026-10-01T22:36:59Z [claude-2026-10-01-a] step: checked 'Re-vendor recurrent_moe_expert'
+- 2026-10-01T22:36:59Z [claude-2026-10-01-a] step: checked 'Re-vendor REAI2'
+- 2026-10-01T22:36:59Z [claude-2026-10-01-a] step: checked 'Re-vendor OSBF'
+- 2026-10-01T22:36:59Z [claude-2026-10-01-a] note: Re-vendored via each repo's own ledger (policy treats ledger.py as code, so a task + trailer, not Ledger-Exempt): recurrent_moe_expert main ddaef2b/T-h7pzjp, REAI2 main 0ccd75fb/T-0acdmf (path-limited commit; the tree had unrelated in-flight agent changes, untouched), OSBF branch claude/agent-orchestrator-ledger-nwxedp 5971b3bc/T-zbonvx (the checked-out line; main is 997 commits behind). validate --coverage --strict green on all three; nothing pushed.
+- 2026-10-01T22:36:59Z [claude-2026-10-01-a] link: fbe399a Release 1.6.0: ledger log; record closure of T-9jnibd
+- 2026-10-01T22:37:00Z [claude-2026-10-01-a] done: evidence: fbe399a
